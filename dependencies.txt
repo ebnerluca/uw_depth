@@ -1,0 +1,7 @@
+numpy
+opencv-python  # needs "pip install --upgrade pip" first
+PySide2
+matplotlib
+torch
+torchvision
+torchaudio
