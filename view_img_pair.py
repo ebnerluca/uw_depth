@@ -5,6 +5,7 @@
 import cv2
 import numpy as np
 from os.path import join
+import matplotlib.pyplot as plt
 
 
 #########################################
@@ -29,10 +30,13 @@ depth_path = join(project_folder, exported_depths_folder, img_name) + ".tif"
 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
 depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
 
-# create normalized depth for visualization only
+# create depth heatmap for visualization
 tmp_min = np.amin(depth[depth > 0.0])
 tmp_range = np.amax(depth) - tmp_min
 depth_n = (depth - tmp_min) / tmp_range
+colormap = plt.get_cmap("inferno")
+depth_n = (colormap(1.0 - depth_n) * 255).astype(np.uint8)[:, :, :3]
+depth_n = cv2.cvtColor(depth_n, cv2.COLOR_RGB2BGR)
 
 # print stats
 img_dimensions = img.shape
@@ -65,20 +69,17 @@ overlay_laplacian = cv2.addWeighted(
     cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), 0.5, np.uint8(laplacian * 255), 0.5, 0
 )
 
-# create overlay with depth map
-depth_n_red = cv2.cvtColor(np.uint8(depth_n * 255), cv2.COLOR_GRAY2BGR)
-depth_n_red[:, :, 0] = 0
-depth_n_red[:, :, 1] = 0
+# create overlay with depth heatmap
 overlay_depth = cv2.addWeighted(
-    cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), 0.5, depth_n_red, 0.5, 0
+    cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), 0.7, depth_n, 0.3, 0
 )
 
 # visualize
 cv2.imshow("image", img)
-cv2.imshow("depth normalized", depth_n)
+cv2.imshow("depth heatmap", depth_n)
 cv2.imshow("laplacian", laplacian)
 cv2.imshow("overlay with laplacian", overlay_laplacian)
-cv2.imshow("overlay with depth", overlay_depth)
+cv2.imshow("overlay with depth heatmap", overlay_depth)
 cv2.waitKey(0)
 
 # save
