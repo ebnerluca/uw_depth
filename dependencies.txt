@@ -1,7 +1,13 @@
+# data
 numpy
-opencv-python  # needs "pip install --upgrade pip" first
-PySide2
+pandas
 matplotlib
+
+# opencv
+opencv-python  # needs "pip install --upgrade pip" first
+opencv-contrib-python
+
+# torch
 torch
 torchvision
 torchaudio
