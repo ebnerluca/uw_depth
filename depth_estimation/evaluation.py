@@ -99,7 +99,7 @@ class Evaluation:
 
         # MSE
         mse = mean_squared_error(pr_img, gt_img)
-        rmse = root_mean_squared_error(mse)
+        rmse = np.log(mse)  # do this rather than root_mean_squared_error bc its faster
 
         # self.log(f"MSE: {round(mse, 3)}, RMSE: {round(rmse, 3)}")
 
