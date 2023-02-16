@@ -40,8 +40,8 @@ def main():
     )
     print(benchmarks)
 
-    benchmarks.to_csv("benchmarks.csv")
-    benchmarks_detailed.to_csv("benchmarks_detailed.csv")
+    benchmarks.to_csv(join(prediction_folder, "benchmarks.csv"))
+    benchmarks_detailed.to_csv(join(prediction_folder, "benchmarks_detailed.csv"))
 
 
 if __name__ == "__main__":
