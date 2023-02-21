@@ -1,4 +1,5 @@
-from os.path import exists, basename
+from os.path import exists, basename, splitext
+import time
 
 import cv2
 import pandas as pd
@@ -8,8 +9,23 @@ from .utils import resize_to_smaller
 
 
 class Evaluation:
-    def __init__(self, logging=False) -> None:
+    def __init__(
+        self,
+        method_name,
+        logging=False,
+        use_median_scaling=False,
+        modify_prediction_func=None,
+    ) -> None:
+        self.method_name = method_name
         self.logging = logging
+        self.use_median_scaling = (
+            use_median_scaling  # if predictions are not correctly scaled
+        )
+        self.modify_prediction = modify_prediction_func
+        if self.use_median_scaling:
+            self.log("Using median scaling for predictions!")
+        if self.modify_prediction is not None:
+            self.log("Prediction modifier function set!")
 
     def evaluate(self, prediction_paths, ground_truth_paths):
         """Evaluates a given model on a given dataset."""
@@ -30,17 +46,39 @@ class Evaluation:
         mse_vec = []
         rmse_vec = []
         mare_vec = []
-        mrse_vec = []
+        rse_vec = []
         accval_vec = []
+        n_invalid = 0
         for i in range(n_predictions):
 
-            pr_img = cv2.imread(prediction_paths[i], cv2.IMREAD_UNCHANGED)
+            # check foramat of prediction
+            if splitext(prediction_paths[i])[1] == ".npy":
+                pr_img = np.load(prediction_paths[i])
+            else:
+                pr_img = cv2.imread(prediction_paths[i], cv2.IMREAD_UNCHANGED)
+
+            # ground truth is .tif
             gt_img = cv2.imread(ground_truth_paths[i], cv2.IMREAD_UNCHANGED)
 
-            if np.any(gt_img == 0.0):  # skip if gt is incomplete
+            # get rid of unnecessary dimensions
+            pr_img = pr_img.squeeze()
+            gt_img = gt_img.squeeze()
+
+            # skip if gt is incomplete
+            if np.any(gt_img == 0.0):
+                n_invalid += 1
                 continue
 
-            mse, rmse, mare, mrse, accval = self.evaluate_pair(pr_img, gt_img)
+            # modify prediction if some modification function is set
+            if self.modify_prediction is not None:
+                pr_img = self.modify_prediction(pr_img)
+
+            # apply median scaling if prediction has arbitrary scale
+            if self.use_median_scaling:
+                ratio = np.median(gt_img) / np.median(pr_img)
+                pr_img *= ratio
+
+            mse, rmse, mare, rse, accval = self.evaluate_pair(pr_img, gt_img)
 
             # best and worst
             if mse < best_mse:
@@ -55,11 +93,11 @@ class Evaluation:
             mse_vec.append(mse)
             rmse_vec.append(rmse)
             mare_vec.append(mare)
-            mrse_vec.append(mrse)
+            rse_vec.append(rse)
             accval_vec.append(accval)
 
             # print progress
-            if i % 10 == 0:
+            if i % 50 == 0:
                 self.log(f"{i}/{n_predictions}")
             i += 1
 
@@ -69,26 +107,27 @@ class Evaluation:
         mse_vec = np.array(mse_vec)
         rmse_vec = np.array(rmse_vec)
         mare_vec = np.array(mare_vec)
-        mrse_vec = np.array(mrse_vec)
+        rse_vec = np.array(rse_vec)
         accval_vec = np.array(accval_vec)
 
         # mean/median of benchmarks over dataset
         mse_mean = np.mean(mse_vec)
         rmse_mean = np.mean(rmse_vec)
         mare_mean = np.mean(mare_vec)
-        mrse_mean = np.mean(mrse_vec)
+        rse_mean = np.mean(rse_vec)
         accval_mean = np.mean(accval_vec)
         # mse_median = np.median(mse_vec)
         # rmse_median = np.median(rmse_vec)
 
         # benchmarks dict
         benchmarks = {
+            "method": [self.method_name],
             "mse_mean": [mse_mean],
             "rmse_mean": [rmse_mean],
             # "mse_median": [mse_median],
             # "rmse_median": [rmse_median],
             "mare_mean": [mare_mean],
-            "mrse_mean": [mrse_mean],
+            "rse_mean": [rse_mean],
             "accval_mean": [accval_mean],
             "best_mse": [best_mse],
             "best_img": [best_img],
@@ -101,7 +140,7 @@ class Evaluation:
             "mse": mse_vec,
             "rmse": rmse_vec,
             "mare": mare_vec,
-            "mrse": mrse_vec,
+            "rse": rse_vec,
             "accval": accval_vec,
         }
 
@@ -110,7 +149,9 @@ class Evaluation:
         benchmarks_detailed = pd.DataFrame.from_dict(benchmarks_detailed)
 
         self.log("Evaluation done.")
-
+        self.log(
+            f"Warning: {n_invalid} image pairs were skipped because the ground truth was incomplete."
+        )
         return benchmarks, benchmarks_detailed
 
     # def evaluate_pair(self, prediction_path, ground_truth_path):
@@ -124,12 +165,12 @@ class Evaluation:
         mse = mean_squared_error(pr_img, gt_img)
         rmse = np.sqrt(mse)  # do this rather than root_mean_squared_error bc its faster
         mare = mean_absolute_relative_error(pr_img, gt_img)
-        mrse = mean_relative_squared_error(pr_img, gt_img)
+        rse = relative_squared_error(pr_img, gt_img)
         accval = accuracy_value(pr_img, gt_img)
 
         # self.log(f"MSE: {round(mse, 3)}, RMSE: {round(rmse, 3)}")
 
-        return mse, rmse, mare, mrse, accval
+        return mse, rmse, mare, rse, accval
 
     def check_dataset(self, pr_paths, gt_paths):
         # check if all files exist
