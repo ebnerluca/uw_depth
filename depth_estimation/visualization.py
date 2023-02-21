@@ -1,29 +1,19 @@
 import cv2
 import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
-
-from os.path import basename
 
 from .utils import resize_to_smallest
 
 
-def visualize_heatmaps(img_paths):
+def visualize_heatmaps(imgs, img_names):
 
-    # read
-    imgs = []
-    img_names = []
-    for img_path in img_paths:
-
-        img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-        img_name = basename(img_path)
+    for img, img_name in zip(imgs, img_names):
 
         print(img_name)
         print(f"Shape: {img.shape}")
         print(f"Range: [{np.amin(img)}, {np.amax(img)}]")
         print("")
-
-        imgs.append(img)
-        img_names.append(img_name)
 
     # resize
     imgs = resize_to_smallest(imgs)
@@ -41,4 +31,13 @@ def visualize_heatmaps(img_paths):
         # show heatmap img
         cv2.imshow(img_name, img)
 
-    cv2.waitKey(0)
+
+def visualize_depth_histogram(imgs, img_names, n_bins=100):
+    for img, img_name in zip(imgs, img_names):
+
+        counts, bins = np.histogram(img, bins=n_bins)
+        fig = plt.figure(img_name)
+        plt.hist(bins[:-1], bins, weights=counts)
+        fig.suptitle(img_name)
+
+    plt.show()
