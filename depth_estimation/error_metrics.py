@@ -2,7 +2,7 @@ import numpy as np
 
 
 def mean_squared_error(pr_img, gt_img):
-    """Mean Squared Error (MSE)"""
+    """Mean Squared Error (MSE): Mean of squard pixel errors."""
 
     se = np.sum((pr_img.astype(np.double) - gt_img.astype(np.double)) ** 2)
     mse = se / (pr_img.shape[0] * pr_img.shape[1])
@@ -11,7 +11,7 @@ def mean_squared_error(pr_img, gt_img):
 
 
 def root_mean_squared_error(pr_img, gt_img):
-    """Root Mean Squared Error (RMSE)"""
+    """Root Mean Squared Error (RMSE): Root of MSE"""
 
     se = np.sum((pr_img.astype(np.double) - gt_img.astype(np.double)) ** 2)
     mse = se / (pr_img.shape[0] * pr_img.shape[1])
@@ -37,32 +37,30 @@ def root_mean_squared_log_error(pr_img, gt_img):
 
 
 def mean_absolute_relative_error(pr_img, gt_img):
-    """Mean Absolute Relative Error (MARE)"""
+    """Mean Absolute Relative Error (MARE): Mean of pixel wise relative errors (error normalized by ground truth)"""
 
-    are = np.sum(np.abs(pr_img - gt_img) / gt_img)  # element wise division
+    are = np.sum(np.abs((pr_img - gt_img) / gt_img))  # element wise division
     mare = are / (pr_img.shape[0] * pr_img.shape[1])
 
     return mare
 
 
-def mean_relative_absolute_error(pr_img, gt_img):
-    """Mean Relative Absolute Error (MRAE)"""
+def relative_absolute_error(pr_img, gt_img):
+    """Relative Absolute Error (RAE): Total absolute error normalized by total absolute error of simple predictor"""
 
-    gt_mean = np.sum(gt_img) / (gt_img.shape[0] * gt_img.shape[1])  # simple predictor
-    are = np.sum(np.abs(pr_img - gt_img)) / np.sum(np.abs(gt_img - gt_mean))
-    mare = are / (pr_img.shape[0] * pr_img.shape[1])
+    gt_mean = np.mean(gt_img)  # simple predictor
+    rae = np.sum(np.abs(pr_img - gt_img)) / np.sum(np.abs(gt_img - gt_mean))
 
-    return mare
+    return rae
 
 
-def mean_relative_squared_error(pr_img, gt_img):
-    """Mean Relative Squared Error (MRSE)"""
+def relative_squared_error(pr_img, gt_img):
+    """Relative Squared Error (RSE): Total squared error normalized by total squared error of simple predictior."""
 
-    gt_mean = np.sum(gt_img) / (gt_img.shape[0] * gt_img.shape[1])  # simple predictor
-    sre = np.sum((pr_img - gt_img) ** 2) / np.sum((gt_img - gt_mean) ** 2)
-    msre = sre / (pr_img.shape[0] * pr_img.shape[1])
+    gt_mean = np.mean(gt_img)  # simple predictor
+    rse = np.sum((pr_img - gt_img) ** 2) / np.sum((gt_img - gt_mean) ** 2)
 
-    return msre
+    return rse
 
 
 def accuracy_value(pr_img, gt_img, d=1.25):
