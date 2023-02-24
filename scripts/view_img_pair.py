@@ -15,12 +15,12 @@ USE_LAPLACIAN_CUTOFF = False
 
 project_folder = "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort"
 img_folder = "i20221105_053256_cv"
-exported_depths_folder = "exported_depth_f32"
-img_name = "PR_20221105_053300_930_LC16"
+exported_depths_folder = "export/depth_render"
+img_name = "PR_20221105_053634_855_LC16"
 
 img_path = join(project_folder, img_folder, img_name) + ".png"
 # depth_path = join(project_folder, exported_depths_folder, img_name) + "_rendered.png"
-depth_path = join(project_folder, exported_depths_folder, img_name) + ".tif"
+depth_path = join(project_folder, exported_depths_folder, img_name) + "_render.tif"
 # depth_path = join(project_folder, exported_depths_folder, img_name) + "_undistorted.tif"
 
 #########################################
@@ -83,5 +83,5 @@ cv2.imshow("overlay with depth heatmap", overlay_depth)
 cv2.waitKey(0)
 
 # save
-# cv2.imwrite("/home/auv/depth_estimation/out/overlay.png", overlay)
+cv2.imwrite(depth_path.replace(".tif", "") + "_heatmap.tif", depth_n)
 # cv2.imwrite("/home/auv/depth_estimation/out/overlay2.png", overlay2)
