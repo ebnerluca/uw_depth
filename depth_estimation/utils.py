@@ -39,3 +39,21 @@ def resize_to_biggest(imgs):
         imgs[i] = cv2.resize(imgs[i], (dim[1], dim[0]))
 
     return imgs
+
+
+def get_depth_range(gt_img_paths):
+    """Returns min and max depth range in ground truth dataset. Paths expected to be in .tif format."""
+
+    min = np.inf
+    max = 0.0
+
+    for path in gt_img_paths:
+        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        current_min = np.amin(img)
+        current_max = np.amax(img)
+        if current_min < min:
+            min = current_min
+        if current_max > max:
+            max = current_max
+
+    return min, max
