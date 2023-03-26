@@ -41,8 +41,14 @@ def resize_to_biggest(imgs):
     return imgs
 
 
+def resize(imgs, resolution):
+    for i in range(len(imgs)):
+        imgs[i] = cv2.resize(imgs[i], (resolution[1], resolution[0]))
+    return imgs
+
+
 def get_depth_range(gt_img_paths):
-    """Returns min and max depth range in ground truth dataset. Paths expected to be in .tif format."""
+    """Returns min and max depth range in dataset. Paths expected to be in cv2 readable format."""
 
     min = np.inf
     max = 0.0
@@ -57,3 +63,13 @@ def get_depth_range(gt_img_paths):
             max = current_max
 
     return min, max
+
+
+def normalize_img(img):
+    "Normalize img such that all entries are in [0,1]"
+
+    max = np.max(img)
+    min = np.min(img)
+    range = max - min
+    out = (img - min) / range
+    return out

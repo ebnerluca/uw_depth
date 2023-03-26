@@ -13,19 +13,23 @@ class Evaluation:
         self,
         method_name,
         logging=False,
-        use_median_scaling=False,
+        # use_median_scaling=False,
         modify_prediction_func=None,
+        modify_ground_truth_func=None,
     ) -> None:
         self.method_name = method_name
         self.logging = logging
-        self.use_median_scaling = (
-            use_median_scaling  # if predictions are not correctly scaled
-        )
+        # self.use_median_scaling = (
+        #     use_median_scaling  # if predictions are not correctly scaled
+        # )
         self.modify_prediction = modify_prediction_func
-        if self.use_median_scaling:
-            self.log("Using median scaling for predictions!")
+        self.modify_ground_truth = modify_ground_truth_func
+        # if self.use_median_scaling:
+        #     self.log("Using median scaling for predictions!")
         if self.modify_prediction is not None:
             self.log("Prediction modifier function set!")
+        if self.modify_ground_truth is not None:
+            self.log("Ground truth modifier function set!")
 
     def evaluate(self, prediction_paths, ground_truth_paths):
         """Evaluates a given model on a given dataset."""
@@ -73,10 +77,13 @@ class Evaluation:
             if self.modify_prediction is not None:
                 pr_img = self.modify_prediction(pr_img)
 
+            if self.modify_ground_truth is not None:
+                gt_img = self.modify_ground_truth(gt_img)
+
             # apply median scaling if prediction has arbitrary scale
-            if self.use_median_scaling:
-                ratio = np.median(gt_img) / np.median(pr_img)
-                pr_img *= ratio
+            # if self.use_median_scaling:
+            #     ratio = np.median(gt_img) / np.median(pr_img)
+            #     pr_img *= ratio
 
             mse, rmse, mare, rse, accval = self.evaluate_pair(pr_img, gt_img)
 
@@ -99,6 +106,9 @@ class Evaluation:
             # print progress
             if i % 50 == 0:
                 self.log(f"{i}/{n_predictions}")
+                self.log(
+                    f"Evaluating prediction {basename(prediction_paths[i])} with ground truth {basename(ground_truth_paths[i])}"
+                )
             i += 1
 
         self.log("Creating benchmarks ...")
@@ -168,7 +178,8 @@ class Evaluation:
         rse = relative_squared_error(pr_img, gt_img)
         accval = accuracy_value(pr_img, gt_img)
 
-        # self.log(f"MSE: {round(mse, 3)}, RMSE: {round(rmse, 3)}")
+        # self.log(f"pr range: [{np.min(pr_img)}, {np.max(pr_img)}]")
+        # self.log(f"gt range: [{np.min(gt_img)}, {np.max(gt_img)}]")
 
         return mse, rmse, mare, rse, accval
 

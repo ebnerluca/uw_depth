@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-from .utils import resize_to_smallest
+from .utils import resize_to_smallest, resize_to_biggest, resize, normalize_img
 
 
-def visualize_heatmaps(imgs, img_names):
+def visualize_heatmaps(imgs, img_names, resolution=None):
 
     for img, img_name in zip(imgs, img_names):
 
@@ -16,20 +16,22 @@ def visualize_heatmaps(imgs, img_names):
         print("")
 
     # resize
-    imgs = resize_to_smallest(imgs)
+    if resolution is None:
+        imgs = resize_to_smallest(imgs)
+    else:
+        imgs = resize(imgs, resolution)
 
     # generate heatmaps
+    heatmaps = []
     for img_name, img in zip(img_names, imgs):
 
-        tmp_min = np.amin(img)
-        tmp_range = np.amax(img) - tmp_min
-        img = (img - tmp_min) / tmp_range
-        colormap = plt.get_cmap("inferno")
-        img = (colormap(1.0 - img) * 255).astype(np.uint8)[:, :, :3]
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        heatmap = get_heatmap(img)
+        heatmaps.append(heatmap)
 
         # show heatmap img
-        cv2.imshow(img_name, img)
+        cv2.imshow(img_name, heatmap)
+
+    return heatmaps
 
 
 def visualize_depth_histogram(imgs, img_names, n_bins=100):
@@ -41,3 +43,13 @@ def visualize_depth_histogram(imgs, img_names, n_bins=100):
         fig.suptitle(img_name)
 
     plt.show()
+
+
+def get_heatmap(img):
+
+    out = normalize_img(img)
+    colormap = plt.get_cmap("inferno")
+    out = (colormap(1.0 - out) * 255).astype(np.uint8)[:, :, :3]
+    out = cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
+
+    return out
