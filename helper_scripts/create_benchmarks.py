@@ -3,8 +3,8 @@ import glob
 from os.path import basename, join, exists, splitext
 import argparse
 
-from depth_estimation_evaluation.evaluation import Evaluation
-from depth_estimation_evaluation.utils import normalize_img
+from depth_estimation.evaluation import Evaluation
+from depth_estimation.utils import normalize_img
 
 
 def modify_prediction(pr_img):

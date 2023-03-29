@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 from os.path import splitext, basename
-from depth_estimation_evaluation.visualization import (
+from depth_estimation.visualization import (
     visualize_heatmaps,
     visualize_depth_histogram,
 )
