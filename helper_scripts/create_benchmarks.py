@@ -2,6 +2,7 @@ import pandas as pd
 import glob
 from os.path import basename, join, exists, splitext
 import argparse
+import csv
 
 from depth_estimation.evaluation import Evaluation
 from depth_estimation.utils import normalize_img
@@ -23,16 +24,29 @@ def main():
     parser.add_argument("--prediction_folder", type=str, required=True)
     parser.add_argument("--prediction_ext_pattern", type=str, required=True)
     parser.add_argument("--ground_truth_folder", type=str, required=True)
+    parser.add_argument("--test_split_csv", type=str)
     args = parser.parse_args()
 
     method_name = args.method_name
     prediction_folder = args.prediction_folder
     ground_truth_folder = args.ground_truth_folder
     prediction_ext_pattern = args.prediction_ext_pattern
+    test_split_csv = args.test_split_csv
 
     # find initial prediction list
-    candidate_paths = glob.glob(prediction_folder + "/*" + prediction_ext_pattern)
+    if test_split_csv is None:
+        candidate_paths = glob.glob(prediction_folder + "/*" + prediction_ext_pattern)
+    else:
+        candidates = [
+            pair[0] for pair in csv.reader(open(test_split_csv).read().splitlines())
+        ]
+        print(candidates)
+        candidate_paths = [
+            join(prediction_folder, splitext(candidate)[0] + prediction_ext_pattern)
+            for candidate in candidates
+        ]
     print(f"len cands: {len(candidate_paths)}")
+    print(candidate_paths[0])
 
     # construct ground truth list
     prediction_paths = []
