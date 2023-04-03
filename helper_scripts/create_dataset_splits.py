@@ -10,8 +10,8 @@ import pandas as pd
 import random
 
 # params
-images_folder = "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv"
-ground_truth_depth_folder = "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/export/depth_render"
+images_folder = "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv"
+ground_truth_depth_folder = "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/export/depth_render"
 images_pattern = "LC16.png"
 ground_truth_depth_pattern = "LC16_render.tif"
 split_sizes = [
@@ -59,8 +59,9 @@ print(f"Found {len(depths)} valid depth maps.")
 
 
 # shuffle
-random.shuffle(imgs)
-random.shuffle(depths)
+pairs = list(zip(imgs, depths))
+random.shuffle(pairs)
+
 
 # get splits ranges
 n_pairs = len(imgs)
@@ -70,21 +71,16 @@ idx = 0
 for i in range(n_splits):
     split_ranges.append((idx, idx + int(split_sizes[i] * n_pairs)))
     idx += int(split_sizes[i] * n_pairs)
-print(f"n_pairs: {n_pairs}, split_ranges: {split_ranges}")
+# print(f"n_pairs: {n_pairs}, split_ranges: {split_ranges}")
 
 # create splits, each split is a tuple with (imgs_list, depths_list)
 splits = []
 for split_range in split_ranges:
-    splits.append(
-        (
-            sorted(imgs[split_range[0] : split_range[1]]),
-            sorted(depths[split_range[0] : split_range[1]]),
-        )
-    )
+    splits.append((sorted(pairs[split_range[0] : split_range[1]])))
 
 # validation check
 for split in splits:  # for all splits
-    for img, depth in zip(split[0], split[1]):  # for every pair in the split
+    for img, depth in split:
         img_path = join(images_folder, img)
         depth_path = join(ground_truth_depth_folder, depth)
 
@@ -97,11 +93,16 @@ for split in splits:  # for all splits
 print(f"Created {n_splits} splits:")
 for i in range(n_splits):
     split_name = split_names[i]
-    print(f"    - {split_name} split [{len(splits[i][0])} pairs]")
+    print(f"    - {split_name} split [{len(splits[i])} pairs]")
 
 # write file
+print(f"Writing csv files to {images_folder} ...")
 for i in range(n_splits):
     split_name = split_names[i]
-    d = {"img": splits[i][0], "depth": splits[i][1]}
+    split_imgs = [img for img, _ in splits[i]]
+    split_depths = [depth for _, depth in splits[i]]
+    d = {"img": split_imgs, "depth": split_depths}
     df = pd.DataFrame.from_dict(d)
     df.to_csv(join(images_folder, split_name + ".csv"), index=False, header=False)
+
+print("Done")
