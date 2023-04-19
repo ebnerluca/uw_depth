@@ -114,8 +114,8 @@ class ExportDepthDlg(QtWidgets.QDialog):
         count = 0
 
         for camera in camera_list:
-            # if camera.label != "PR_20221105_053300_930_LC16":
-            #     continue
+            if "RM16" in camera.label:
+                continue  # skip greyscale images
             if camera in chunk.depth_maps.keys():
                 depth = chunk.depth_maps[camera].image()
                 if not F32:
