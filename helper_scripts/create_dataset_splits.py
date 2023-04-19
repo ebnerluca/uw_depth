@@ -10,8 +10,8 @@ import pandas as pd
 import random
 
 # params
-images_folder = "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv"
-ground_truth_depth_folder = "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/export/depth_render"
+images_folder = "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv"
+ground_truth_depth_folder = "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/export/depth_render"
 images_pattern = "LC16.png"
 ground_truth_depth_pattern = "LC16_render.tif"
 split_sizes = [
@@ -35,20 +35,21 @@ print(f"Found {len(depth_candidate_paths)} candidates")
 imgs = []
 depths = []
 i = 0
-for candidate_path in depth_candidate_paths:
+for depth_candidate_path in depth_candidate_paths:
+
     # read img
-    img_candidate = cv2.imread(candidate_path, cv2.IMREAD_UNCHANGED)
+    depth_candidate = cv2.imread(depth_candidate_path, cv2.IMREAD_UNCHANGED)
 
     # check if depth map is incomplete, if yes then skip
-    if np.any(img_candidate <= 0.0):
+    if np.any(depth_candidate <= 0.0):
         continue
 
     # get img name
-    img_name = basename(candidate_path).split(ground_truth_depth_pattern)[0]
+    img_name = basename(depth_candidate_path).split(ground_truth_depth_pattern)[0]
 
     # append pair to imgs and depths list
-    imgs.append(img_name + images_pattern)
-    depths.append(img_name + ground_truth_depth_pattern)
+    imgs.append(join(images_folder, img_name + images_pattern))
+    depths.append(depth_candidate_path)
 
     if i % 100 == 0:
         print(
@@ -81,12 +82,10 @@ for split_range in split_ranges:
 # validation check
 for split in splits:  # for all splits
     for img, depth in split:
-        img_path = join(images_folder, img)
-        depth_path = join(ground_truth_depth_folder, depth)
 
-        if (not exists(img_path)) or (not exists(depth_path)):
+        if (not exists(img)) or (not exists(depth)):
             print("Validation failed, file is missing!")
-            print(f"Missing pair: {img_path}, {depth_path}")
+            print(f"Missing pair: {img}, {depth}")
             exit(1)
 
 # Summary
@@ -105,4 +104,4 @@ for i in range(n_splits):
     df = pd.DataFrame.from_dict(d)
     df.to_csv(join(images_folder, split_name + ".csv"), index=False, header=False)
 
-print("Done")
+print("Done.")
