@@ -5,7 +5,7 @@ import cv2
 import pandas as pd
 
 from .error_metrics import *
-from .utils import resize_to_smaller
+from ..utils import resize_to_smaller
 
 
 class Evaluation:
@@ -19,20 +19,15 @@ class Evaluation:
     ) -> None:
         self.method_name = method_name
         self.logging = logging
-        # self.use_median_scaling = (
-        #     use_median_scaling  # if predictions are not correctly scaled
-        # )
         self.modify_prediction = modify_prediction_func
         self.modify_ground_truth = modify_ground_truth_func
-        # if self.use_median_scaling:
-        #     self.log("Using median scaling for predictions!")
         if self.modify_prediction is not None:
             self.log("Prediction modifier function set!")
         if self.modify_ground_truth is not None:
             self.log("Ground truth modifier function set!")
 
     def evaluate(self, prediction_paths, ground_truth_paths):
-        """Evaluates a given model on a given dataset."""
+        """Evaluates a given model on a given dataset and creates benchmarks such as RMSE etc."""
 
         self.check_dataset(prediction_paths, ground_truth_paths)
 
@@ -80,11 +75,6 @@ class Evaluation:
             if self.modify_ground_truth is not None:
                 gt_img = self.modify_ground_truth(gt_img)
 
-            # apply median scaling if prediction has arbitrary scale
-            # if self.use_median_scaling:
-            #     ratio = np.median(gt_img) / np.median(pr_img)
-            #     pr_img *= ratio
-
             mse, rmse, mare, rse, accval = self.evaluate_pair(pr_img, gt_img)
 
             # best and worst
@@ -126,16 +116,12 @@ class Evaluation:
         mare_mean = np.mean(mare_vec)
         rse_mean = np.mean(rse_vec)
         accval_mean = np.mean(accval_vec)
-        # mse_median = np.median(mse_vec)
-        # rmse_median = np.median(rmse_vec)
 
         # benchmarks dict
         benchmarks = {
             "method": [self.method_name],
             "mse_mean": [mse_mean],
             "rmse_mean": [rmse_mean],
-            # "mse_median": [mse_median],
-            # "rmse_median": [rmse_median],
             "mare_mean": [mare_mean],
             "rse_mean": [rse_mean],
             "accval_mean": [accval_mean],
@@ -177,9 +163,6 @@ class Evaluation:
         mare = mean_absolute_relative_error(pr_img, gt_img)
         rse = relative_squared_error(pr_img, gt_img)
         accval = accuracy_value(pr_img, gt_img)
-
-        # self.log(f"pr range: [{np.min(pr_img)}, {np.max(pr_img)}]")
-        # self.log(f"gt range: [{np.min(gt_img)}, {np.max(gt_img)}]")
 
         return mse, rmse, mare, rse, accval
 
