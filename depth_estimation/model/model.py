@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as functional
-from encoder_decoder import Encoder, Decoder
-from mViT import mViT
+from .encoder_decoder import Encoder, Decoder
+from .mViT import mViT
 
 
 class SimpleEncoderDecoder(nn.Module):
@@ -35,7 +35,14 @@ class UDFNet(nn.Module):
 
         self.encoder = Encoder()
         self.decoder = Decoder()  # out_channels = 48
-        self.mViT = mViT(in_channels=48, num_query_kernels=48, n_bins=n_bins)
+        self.mViT = mViT(
+            in_channels=48,
+            embedding_dim=48,
+            patch_size=16,
+            num_heads=4,
+            num_query_kernels=48,
+            n_bins=n_bins,
+        )
         self.conv_out = nn.Sequential(
             nn.Conv2d(48, n_bins, kernel_size=1, stride=1, padding=0),
             nn.Softmax(dim=1),
@@ -58,7 +65,7 @@ class UDFNet(nn.Module):
         # print(f"bin_widths normed: {bin_widths_normed}")
         bin_edges_normed = torch.cumsum(bin_widths_normed, dim=1)
         bin_edges_normed = functional.pad(
-            bin_edges_normed, (1, 0), value=0
+            bin_edges_normed, (1, 0), value=0.0
         )  # add edge at zero
         # print(f"bin_edges normed: {bin_edges_normed}")
         bin_centers_normed = 0.5 * (bin_edges_normed[:, :-1] + bin_edges_normed[:, 1:])
@@ -77,7 +84,7 @@ class UDFNet(nn.Module):
         )
         # print(f"prediction: {prediction.shape}")
 
-        return 0
+        return prediction
 
 
 def test_simple():
@@ -107,7 +114,12 @@ def test_udfnet():
     # inference
     out = udfnet(random_batch)
 
+    print("Ok")
 
+
+# to run this, use "python -m depth_estimation.model.model"
+# otherwise the imports do not work as intended
+# check https://stackoverflow.com/questions/72852/how-can-i-do-relative-imports-in-python
 if __name__ == "__main__":
     # test_simple()
     test_udfnet()

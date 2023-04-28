@@ -1,6 +1,6 @@
 import torch.nn as nn
 from torchvision.models import mobilenet_v2
-from layers import CombinedUpsample
+from .layers import CombinedUpsample
 
 
 class Encoder(nn.Module):

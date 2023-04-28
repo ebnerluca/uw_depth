@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from layers import PatchTransformerEncoder, PixelWiseDotProduct
+from .layers import PatchTransformerEncoder, PixelWiseDotProduct
 
 
 class mViT(nn.Module):
@@ -41,6 +41,7 @@ class mViT(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(256, n_bins),
         )
+        self.n_bins = n_bins
 
         # dot product layer for computing range attention map from decoder output and learned 1x1 kernels
         self.dot_product_layer = PixelWiseDotProduct()
@@ -48,7 +49,7 @@ class mViT(nn.Module):
     def forward(self, x):
 
         out = self.patch_transformer_encoder(
-            x.clone()
+            x.clone()  # TODO test if it works without clone?
         )  # S x E x N (S: num patches aka. sequence length)
 
         # regression head for adaptive bins, size N x E
@@ -61,7 +62,9 @@ class mViT(nn.Module):
 
         # bin widths
         bin_widths_normed = self.mlp(bins_head)
-        bin_widths_normed = torch.relu(bin_widths_normed)  # non negative
+        eps = 0.1  # numerical stability
+        # eps = 1.0 / self.n_bins  # bias: assume all bins equal length
+        bin_widths_normed = torch.relu(bin_widths_normed) + eps  # non negative
         bin_widths_normed /= bin_widths_normed.sum(dim=1, keepdim=True)  # unit length
         # print(f"bin_widths_normed: {bin_widths_normed.shape}")
 

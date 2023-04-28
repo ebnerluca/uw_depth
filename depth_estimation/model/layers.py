@@ -86,7 +86,7 @@ class PatchTransformerEncoder(nn.Module):
             :, : patch_embeddings.size(2)
         ].unsqueeze(
             0
-        )  # unsqueeze to add batch dimension
+        )  # unsqueeze at dim 0 to add batch dimension
 
         # encode patch embeddings with transformer
         patch_embeddings = patch_embeddings.permute(
