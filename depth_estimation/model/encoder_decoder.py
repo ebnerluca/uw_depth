@@ -41,7 +41,9 @@ class Decoder(nn.Module):
         self.up2 = CombinedUpsample(decoder_channels // 2 + 64, decoder_channels // 4)
         self.up3 = CombinedUpsample(decoder_channels // 4 + 32, decoder_channels // 8)
         self.up4 = CombinedUpsample(decoder_channels // 8 + 24, decoder_channels // 8)
-        self.up5 = CombinedUpsample(decoder_channels // 8 + 16, decoder_channels // 16)
+        self.up5 = CombinedUpsample(
+            decoder_channels // 8 + 16, decoder_channels // 16 - 2
+        )
 
         # 3x3 convolution, 1 channel output
         self.single_channel_output = single_channel_output

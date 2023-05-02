@@ -34,9 +34,9 @@ class UDFNet(nn.Module):
         super(UDFNet, self).__init__()
 
         self.encoder = Encoder()
-        self.decoder = Decoder()  # out_channels = 48
+        self.decoder = Decoder()  # output N x 46 x 240 x 320
         self.mViT = mViT(
-            in_channels=48,
+            in_channels=48,  # decoder output plus sparse prior parametrization
             embedding_dim=48,
             patch_size=16,
             num_heads=4,
@@ -50,16 +50,22 @@ class UDFNet(nn.Module):
 
         self.n_bins = n_bins
 
-    def forward(self, x):
+    def forward(self, rgb, depth_prior):
+        """Input:
+        - rgb: RGB input image, Nx3x480x640
+        - depth_prior: Parametrization of sparse prior guidance signal, Nx2x240x320"""
 
         # encode
-        out = self.encoder(x)
+        encoder_out = self.encoder(rgb)
 
         # decode
-        out = self.decoder(out)
+        decoder_out = self.decoder(encoder_out)
+
+        # concat prior parametrization
+        mvit_in = torch.cat((decoder_out, depth_prior), dim=1)
 
         # normed bin widths, range attention maps
-        bin_widths_normed, range_attention_maps = self.mViT(out)
+        bin_widths_normed, range_attention_maps = self.mViT(mvit_in)
 
         # bin centers in [0,1]
         # print(f"bin_widths normed: {bin_widths_normed}")

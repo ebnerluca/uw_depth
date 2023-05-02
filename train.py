@@ -13,8 +13,14 @@ import datetime
 import os
 
 from depth_estimation.model.model import UDFNet
-from depth_estimation.utils.data import TrainDataset, Uint8PILToTensor, FloatPILToTensor
+from depth_estimation.utils.data import (
+    TrainDataset,
+    Uint8PILToTensor,
+    FloatPILToTensor,
+    get_depth_prior_parametrization,
+)
 from depth_estimation.utils.loss import CombinedLoss
+from depth_estimation.utils.visualization import get_tensorboard_grids
 
 
 # hyper parameters
@@ -40,12 +46,16 @@ def train_model(learning_rate, batch_size, model_str=None):
         train_UDFNet(learning_rate, batch_size)
 
 
-def train_UDFNet(learning_rate, batch_size, learning_rate_decay=1.0, device="cpu"):
+def train_UDFNet(
+    learning_rate, batch_size, learning_rate_decay=1.0, n_priors=100, device="cpu"
+):
     """Train loop to train a UDFNet model."""
 
     torch.autograd.set_detect_anomaly(True)
     # print run infos
-    run_name = f"udfnet_lr{learning_rate}_bs{batch_size}_lrd{learning_rate_decay}"
+    run_name = (
+        f"udfnet_np{n_priors}_lr{learning_rate}_bs{batch_size}_lrd{learning_rate_decay}"
+    )
     print(
         f"Training run {run_name} with parameters:\n"
         + f"    learning rate: {learning_rate}\n"
@@ -119,16 +129,17 @@ def train_UDFNet(learning_rate, batch_size, learning_rate_decay=1.0, device="cpu
         optimizer = AdamW(model.parameters(), lr=lr)
 
         # train epoch
-        # start_time = time.time()
+        start_time = time.time()
         training_loss = train_epoch(
             dataloader=train_dataloader,
             model=model,
+            n_priors=n_priors,
             loss_fn=LOSS_FN,
             optimizer=optimizer,
             device=DEVICE,
             epoch=epoch,
         )
-        # epoch_time = datetime.timedelta(seconds=(time.time() - start_time))
+        print(f"Epoch time: {time.time() - start_time}")
 
         # validate epoch
         validation_loss = validate(
@@ -147,7 +158,9 @@ def train_UDFNet(learning_rate, batch_size, learning_rate_decay=1.0, device="cpu
         save_model(model, epoch, run_name)
 
 
-def train_epoch(dataloader, model, loss_fn, optimizer, device="cpu", epoch=0):
+def train_epoch(
+    dataloader, model, loss_fn, optimizer, n_priors=100, device="cpu", epoch=0
+):
     """Train a model for one epoch."""
 
     # set training mode
@@ -163,13 +176,13 @@ def train_epoch(dataloader, model, loss_fn, optimizer, device="cpu", epoch=0):
         X = sample[0].to(device)
         y = sample[1].to(device)
 
-        #### debug
-        # target_grid = make_grid(y)
-        # summary_writer.add_image("target", target_grid, epoch)
-        ####
+        # get sparse prior parametrization
+        prior = get_depth_prior_parametrization(
+            y, n_samples=n_priors, mu=0.0, std=10.0, normalize=True, device=device
+        )
 
         # prediction
-        pred = model(X)  # pred is of size [n_batches, channels, height, width]
+        pred = model(X, prior)  # pred is of size [n_batches, channels, height, width]
 
         # loss
         batch_loss = loss_fn(pred, y)
@@ -181,13 +194,23 @@ def train_epoch(dataloader, model, loss_fn, optimizer, device="cpu", epoch=0):
         optimizer.step()
 
         # tensorboard summary grids for visual inspection
-        # if not created_grid:
-        #     if pred.shape[0] == BATCH_SIZE:
-        #         rgb_grid = make_grid(X)
-        #         gt_pred_grid = make_grid(torch.cat((y, pred)), nrow=BATCH_SIZE)
-        #         summary_writer.add_image("train_pred_vs_target", gt_pred_grid, epoch)
-        #         summary_writer.add_image("train_rgb", rgb_grid, epoch)
-        #         created_grid = True  # do only one grid to avoid data clutter
+        if not created_grid:
+            if pred.shape[0] == BATCH_SIZE:
+
+                # get tensorboard grids
+                (
+                    target_parametrization_grid,
+                    rgb_target_pred_grid,
+                ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
+
+                # write to tensorboard
+                summary_writer.add_image(
+                    "train_target_parametrization", target_parametrization_grid, epoch
+                )
+                summary_writer.add_image(
+                    "train_rgb_target_pred", rgb_target_pred_grid, epoch
+                )
+                created_grid = True  # do only one grid to avoid data clutter
 
         if batch_id % 40 == 0:
             print(
@@ -195,11 +218,11 @@ def train_epoch(dataloader, model, loss_fn, optimizer, device="cpu", epoch=0):
             )
 
     avg_batch_loss = training_loss / n_batches
-    print(f"average batch training loss: {avg_batch_loss}")
+    print(f"Average batch training loss: {avg_batch_loss}")
     return avg_batch_loss
 
 
-def validate(dataloader, model, loss_fn, device="cpu", epoch=0):
+def validate(dataloader, model, loss_fn, n_priors=100, device="cpu", epoch=0):
     """Validate a model, typically done after each training epoch."""
 
     # set evaluation mode
@@ -215,34 +238,36 @@ def validate(dataloader, model, loss_fn, device="cpu", epoch=0):
         X = sample[0].to(device)
         y = sample[1].to(device)
 
+        # get sparse prior parametrization
+        prior = get_depth_prior_parametrization(
+            y, n_samples=n_priors, mu=0.0, std=10.0, normalize=True, device=device
+        )
+
         # prediction
-        pred = model(X)
+        pred = model(X, prior)
 
         # tensorboard summary grids for visual inspection
         if not created_grid:
             if pred.shape[0] == BATCH_SIZE:
-                rgb_resized = torch.nn.functional.interpolate(
-                    X,
-                    size=[pred.size(2), pred.size(3)],
-                    mode="bilinear",
-                    align_corners=True,
+
+                # get tensorboard grids
+                (
+                    target_parametrization_grid,
+                    rgb_target_pred_grid,
+                ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
+
+                # write to tensorboard
+                summary_writer.add_image(
+                    "target_parametrization", target_parametrization_grid, epoch
                 )
-                # rgb_grid = make_grid(X)
-                target_pred_grid = make_grid(
-                    torch.cat(
-                        (rgb_resized, y.repeat(1, 3, 1, 1), pred.repeat(1, 3, 1, 1))
-                    ),
-                    nrow=BATCH_SIZE,
-                )
-                summary_writer.add_image("rgb_target_pred", target_pred_grid, epoch)
-                # summary_writer.add_image("rgb", rgb_grid, epoch)
+                summary_writer.add_image("rgb_target_pred", rgb_target_pred_grid, epoch)
                 created_grid = True  # do only one grid to avoid data clutter
 
         # add loss
         validation_loss += loss_fn(pred, y).item()
 
     avg_batch_loss = validation_loss / n_batches
-    print(f"average batch validation_loss: {avg_batch_loss}")
+    print(f"Average batch validation_loss: {avg_batch_loss}")
     return avg_batch_loss
 
 

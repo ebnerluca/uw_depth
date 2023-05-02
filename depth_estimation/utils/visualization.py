@@ -1,7 +1,8 @@
 import cv2
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import torch
+from torchvision.utils import make_grid
 
 from .utils import resize_to_smallest, resize_to_biggest, resize, normalize_img
 
@@ -53,3 +54,24 @@ def get_heatmap(img):
     out = cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
 
     return out
+
+
+def get_tensorboard_grids(X, y, prior, pred, nrow):
+
+    # target parametrization
+    prior_map = prior[:, 0, ...].unsqueeze(1)
+    dist_map = prior[:, 1, ...].unsqueeze(1)
+    target_parametrization_grid = make_grid(
+        torch.cat((y, prior_map, dist_map)), nrow=nrow
+    )
+
+    # rgb vs target vs pred
+    rgb_resized = torch.nn.functional.interpolate(
+        X, size=[pred.size(2), pred.size(3)], mode="bilinear", align_corners=True
+    )
+    rgb_target_pred_grid = make_grid(
+        torch.cat((rgb_resized, y.repeat(1, 3, 1, 1), pred.repeat(1, 3, 1, 1))),
+        nrow=nrow,
+    )
+
+    return target_parametrization_grid, rgb_target_pred_grid
