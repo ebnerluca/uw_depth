@@ -2,7 +2,6 @@ import torch
 from torch.distributions.normal import Normal
 import numpy as np
 
-
 from PIL import Image
 import csv
 import random
@@ -16,11 +15,13 @@ class TrainDataset:
         shuffle=False,
         input_transform=None,
         target_transform=None,
+        # both_transform=None,
     ) -> None:
 
         # transforms applied to input and target
         self.input_transform = input_transform
         self.target_transform = target_transform
+        # self.both_transform = both_transform
 
         # load pairs
         self.pairs = []
@@ -53,6 +54,8 @@ class TrainDataset:
             input_img = self.input_transform(input_img)
         if self.target_transform is not None:
             target_img = self.target_transform(target_img)
+        # if self.both_transform is not None:
+        #     pass
 
         return input_img, target_img
 
@@ -90,9 +93,8 @@ class FloatPILToTensor:
     Specify zero_add value to add to pixels which would otherwise be exactly zero,
     this can avoid issues e.g. when using the log() function since log(0) is undefined."""
 
-    def __init__(self, normalize=False, zero_add=0.0):
+    def __init__(self, normalize=False):
         self.normalize = normalize
-        self.zero_add = zero_add
 
     def __call__(self, img):
         # convert to np array
@@ -102,12 +104,7 @@ class FloatPILToTensor:
         if self.normalize:
             min = img_np.min()
             max = img_np.max()
-            range = max - min
-            img_np = (img_np - min) / range
-
-        # add zero_add value to pixels which would be zero otherwise
-        if self.zero_add != 0.0:
-            img_np[img_np == 0.0] = self.zero_add
+            img_np = (img_np - min) / (max - min)
 
         # enforce dimension order: channels x height x width
         if img_np.ndim == 2:
@@ -201,20 +198,18 @@ def get_depth_prior_parametrization(
         priors = targets[batch, 0, idcs_height, idcs_width]
 
         # nearest neighbor prior map
-        prior_map = priors[dist_argmin]
+        prior_map = priors[dist_argmin]  # 1xHxW
 
         # linear distance model:
         # normalize and invert prior map (close points should have strong signals)
         # signal_strength_map = 1.0 - (dist_map_min / dist_map_min.max())
 
-        # normalize the depth prior values
+        # normalize the depth prior values to [0,1]
         if normalize:
-            eps = 1e-10
+            eps = 1e-10  # avoid zero division if max == min (e.g. only one sample)
             min = prior_map.min()
             max = prior_map.max()
-            prior_map = (prior_map - min + eps) / (
-                max - min + eps
-            )  # shift and scale to range [0,1]
+            prior_map = (prior_map - min) / (max - min + eps)
 
         # concat
         prior_maps = torch.cat((prior_maps, prior_map.unsqueeze(0)), dim=0)
