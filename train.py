@@ -13,6 +13,8 @@ from depth_estimation.utils.data import (
     TrainDataset,
     Uint8PILToTensor,
     FloatPILToTensor,
+    InputTargetRandomHorizontalFlip,
+    InputTargetRandomVerticalFlip,
     get_depth_prior_parametrization,
 )
 from depth_estimation.utils.loss import CombinedLoss
@@ -64,24 +66,14 @@ def train_UDFNet():
             "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/train.csv",
         ],
         shuffle=True,
-        input_transform=transforms.Compose(
+        input_transform=transforms.Compose([Uint8PILToTensor()]),
+        target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
+        both_transform=transforms.Compose(
             [
-                Uint8PILToTensor(),
+                InputTargetRandomHorizontalFlip(),
+                InputTargetRandomVerticalFlip(),
             ]
         ),
-        target_transform=transforms.Compose(
-            [
-                FloatPILToTensor(
-                    normalize=True,
-                ),
-            ]
-        ),
-        # both_transform=transforms.Compose(
-        #     [
-        #         transforms.RandomHorizontalFlip(),
-        #         transforms.RandomVerticalFlip(),
-        #     ]
-        # ),
     )
     validation_dataset = TrainDataset(
         pairs_csv_files=[
@@ -93,13 +85,7 @@ def train_UDFNet():
         ],
         shuffle=True,
         input_transform=transforms.Compose([Uint8PILToTensor()]),
-        target_transform=transforms.Compose(
-            [
-                FloatPILToTensor(
-                    normalize=True,
-                ),
-            ]
-        ),
+        target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
     )
 
     # dataloaders
