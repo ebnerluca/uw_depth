@@ -12,22 +12,25 @@ class CombinedLoss(nn.Module):
 
         # loss components
         self.silog_loss = SILogLoss()
-        self.mse_loss = nn.MSELoss()
+        self.l2_loss = L2Loss()
 
     def forward(self, pred, target):
 
         # loss components
         silog_loss = self.silog_loss(pred, target)
-        mse_loss = self.mse_loss(pred, target)
+        l2_loss = self.l2_loss(pred, target)
 
         # combined loss
-        # loss = 0.4 * mse_loss + 0.6 * 10.0 * torch.sqrt(silog_loss)
-        loss = 0.4 * mse_loss + 0.6 * torch.sqrt(silog_loss)
+        loss = 0.4 * l2_loss + 0.6 * silog_loss
 
         return loss
 
 
 class SILogLoss(nn.Module):
+    """Inspired by\\
+    AdaBins (https://arxiv.org/abs/2011.14141) and\\
+    UDepth (https://arxiv.org/abs/2209.12358)"""
+
     def __init__(self, eps=1e-10) -> None:
         super(SILogLoss, self).__init__()
         self.name = "SILog"
@@ -47,3 +50,17 @@ class SILogLoss(nn.Module):
         # loss2 = torch.var(d) + 0.15 * torch.pow(torch.mean(d), 2)
 
         return 10.0 * torch.sqrt(loss)
+
+
+class L2Loss(nn.Module):
+    def __init__(self) -> None:
+        super(L2Loss, self).__init__()
+
+        self.name = "L2Loss"
+
+        # l2 loss is sqrt of mse loss
+        self.mse_loss = nn.MSELoss()
+
+    def forward(self, pred, target):
+
+        return torch.sqrt(self.mse_loss(pred, target))
