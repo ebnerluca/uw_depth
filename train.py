@@ -18,11 +18,12 @@ from depth_estimation.utils.data import (
     # get_depth_prior_parametrization,
 )
 from depth_estimation.utils.depth_prior import get_depth_prior_from_ground_truth
-from depth_estimation.utils.loss import CombinedLoss
+from depth_estimation.utils.loss import CombinedLoss, SILogLoss, L2Loss
 from depth_estimation.utils.visualization import get_tensorboard_grids
+from depth_estimation.utils.evaluation import get_batch_losses
 
 
-# hyper parameters
+# training parameters
 BATCH_SIZE = 4
 LEARNING_RATE = 0.0001
 LEARNING_RATE_DECAY = 1.0
@@ -35,6 +36,20 @@ N_PRIORS_MAX = 100
 N_PRIORS_MIN = 100
 MU = 0.0
 STD_DEV = 10.0
+
+# validation parameters
+VALIDATION_LOSS_FUNCTIONS = [
+    L2Loss(),
+    torch.nn.L1Loss(),
+    SILogLoss(),
+    CombinedLoss(),  # last in list should match objective (for console output)
+]
+VALIDATION_LOSS_FUNCTIONS_NAMES = [
+    "L2 Loss (RMSE)",
+    "L1 Loss (MAE)",
+    "SILog Loss",
+    "validation_loss",  # last in list should match objective (for console output)
+]
 
 
 def train_UDFNet():
@@ -117,18 +132,22 @@ def train_UDFNet():
         print(f"Epoch time: {time.time() - start_time}")
 
         # validate epoch
-        validation_loss = validate(
+        validation_losses = validate(
             dataloader=validation_dataloader,
             model=model,
             n_priors_min=100,
             n_priors_max=100,
-            loss_fn=LOSS_FN,
+            loss_functions=VALIDATION_LOSS_FUNCTIONS,
             epoch=epoch,
         )
 
         # tensorboard summary
         summary_writer.add_scalar("training_loss", training_loss, epoch)
-        summary_writer.add_scalar("validation_loss", validation_loss, epoch)
+        for i in range(len(validation_losses)):
+            loss = validation_losses[i].item()
+            loss_name = VALIDATION_LOSS_FUNCTIONS_NAMES[i]
+
+            summary_writer.add_scalar(f"validation_loss/{loss_name}", loss, epoch)
 
         # save model
         save_model(model, epoch, run_name)
@@ -224,7 +243,7 @@ def train_epoch(
 def validate(
     dataloader,
     model,
-    loss_fn,
+    loss_functions,
     n_priors_min=100,
     n_priors_max=100,
     epoch=0,
@@ -238,7 +257,7 @@ def validate(
     with torch.no_grad():
 
         n_batches = len(dataloader)
-        validation_loss = 0.0
+        validation_losses = torch.zeros(len(loss_functions), device=DEVICE)
         created_grid = False
         for batch_id, data in enumerate(dataloader):
 
@@ -282,11 +301,13 @@ def validate(
                     created_grid = True
 
             # add loss
-            validation_loss += loss_fn(pred, y).item()
+            validation_losses += get_batch_losses(
+                pred, y, loss_functions, device=DEVICE
+            )
 
-    avg_batch_loss = validation_loss / n_batches
-    print(f"Average batch validation_loss: {avg_batch_loss}")
-    return avg_batch_loss
+    avg_batch_losses = validation_losses / n_batches
+    print(f"Average batch validation loss: {avg_batch_losses[-1].item()}")
+    return avg_batch_losses
 
 
 def save_model(model, epoch, run_name):
@@ -301,28 +322,6 @@ def save_model(model, epoch, run_name):
     # save model
     model_filename = f"{folder_name}/model_e{epoch}_{run_name}.pth"
     torch.save(model.state_dict(), model_filename)
-
-
-# def print_cuda_info():
-#     print("---")
-#     print(
-#         f"torch.cuda.memory_allocated: {torch.cuda.memory_allocated(0) / 1024 / 1024 / 1024}GB"
-#     )
-#     print(
-#         f"torch.cuda.memory_reserved: {torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024}GB"
-#     )
-#     print(
-#         f"torch.cuda.max_memory_reserved: {torch.cuda.max_memory_reserved(0) / 1024 / 1024 / 1024}GB"
-#     )
-#     print("---")
-
-
-# def cuda_empty_cache():
-#     before = torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024
-#     gc.collect()
-#     torch.cuda.empty_cache()
-#     freed = before - torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024
-#     print(f"Freed {freed} GB of GPU memory.")
 
 
 if __name__ == "__main__":
