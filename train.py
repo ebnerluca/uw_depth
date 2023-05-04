@@ -15,8 +15,9 @@ from depth_estimation.utils.data import (
     FloatPILToTensor,
     InputTargetRandomHorizontalFlip,
     InputTargetRandomVerticalFlip,
-    get_depth_prior_parametrization,
+    # get_depth_prior_parametrization,
 )
+from depth_estimation.utils.depth_prior import get_depth_prior_from_ground_truth
 from depth_estimation.utils.loss import CombinedLoss
 from depth_estimation.utils.visualization import get_tensorboard_grids
 
@@ -173,7 +174,7 @@ def train_epoch(
             n_priors = n_priors_max
 
         # get sparse prior parametrization
-        prior = get_depth_prior_parametrization(
+        prior = get_depth_prior_from_ground_truth(
             y, n_samples=n_priors, mu=0.0, std=10.0, normalize=True, device=DEVICE
         )
 
@@ -198,10 +199,6 @@ def train_epoch(
                     target_parametrization_grid,
                     rgb_target_pred_grid,
                 ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
-
-                # # move grids to cpu so summary writer does not reserve memory on gpu
-                # target_parametrization_grid = target_parametrization_grid.detach().cpu()
-                # rgb_target_pred_grid = rgb_target_pred_grid.detach().cpu()
 
                 # write to tensorboard
                 summary_writer.add_image(
@@ -256,7 +253,7 @@ def validate(
                 n_priors = n_priors_max
 
             # get sparse prior parametrization
-            prior = get_depth_prior_parametrization(
+            prior = get_depth_prior_from_ground_truth(
                 y, n_samples=n_priors, mu=MU, std=STD_DEV, normalize=True, device=DEVICE
             )
 
@@ -272,12 +269,6 @@ def validate(
                         target_parametrization_grid,
                         rgb_target_pred_grid,
                     ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
-
-                    # move grids to cpu so summary writer does not reserve memory on gpu
-                    # target_parametrization_grid = (
-                    #     target_parametrization_grid.detach().cpu()
-                    # )
-                    # rgb_target_pred_grid = rgb_target_pred_grid.detach().cpu()
 
                     # write to tensorboard
                     summary_writer.add_image(
