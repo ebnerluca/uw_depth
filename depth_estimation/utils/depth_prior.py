@@ -123,3 +123,62 @@ def get_depth_prior_from_features(
     returns a depth prior parametrization."""
 
     pass
+
+
+def test_get_priors(device="cpu"):
+    """Test sparse prior generation and parametrization."""
+
+    print("Testing depth prior parametrization ...")
+
+    # import modules only needed for testing
+    import matplotlib.pyplot as plt
+    import time
+
+    # generate target ground truth maps to generate prior from
+    # in this case, simple gradient images are used
+    target1 = torch.linspace(0, 0.5, 320).repeat(240, 1) + torch.linspace(
+        0, 0.5, 240
+    ).repeat(320, 1).transpose(0, 1)
+    target1 = target1[None, None, ...] * 3.0  # add batch and channel dimension
+    target2 = 1.0 - target1
+    targets = torch.cat((target1, target1, target2, target2), dim=0).to(device)
+
+    # get priors and dist_map
+    starttime = time.time()
+    prior = get_depth_prior_from_ground_truth(
+        targets, n_samples=100, mu=0.0, std=10.0, normalize=True, device=device
+    )
+    prior_maps = prior[:, 0, ...].unsqueeze(1)
+    signal_maps = prior[:, 1, ...].unsqueeze(1)
+    elapsed_time = time.time() - starttime
+    print(f"sampling time: {elapsed_time} seconds")
+
+    # copy back to cpu for visuals
+    targets = targets.cpu()
+    prior_maps = prior_maps.cpu()
+    signal_maps = signal_maps.cpu()
+
+    # plot
+    # for i in range(targets.size(0)):
+    for i in range(1):
+
+        target = targets[i, ...]
+        prior_map = prior_maps[i, ...]
+        signal_map = signal_maps[i, ...]
+        plt.figure(f"target {i}")
+        plt.imshow(target.permute(1, 2, 0))
+        plt.figure(f"prior map {i}")
+        plt.imshow(prior_map.permute(1, 2, 0))
+        plt.figure(f"dist map {i}")
+        plt.imshow(signal_map.permute(1, 2, 0))
+
+        print(f"prior map {i} range: [{prior_map.min()}, {prior_map.max()}]")
+        print(f"signal map {i} range: [{signal_map.min()}, {signal_map.max()}]")
+
+    plt.show()
+
+    print("Testing depth prior parametrization done.")
+
+
+if __name__ == "__main__":
+    test_get_priors()
