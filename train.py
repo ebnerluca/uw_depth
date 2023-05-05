@@ -1,11 +1,11 @@
 import torch
 from torch.optim import AdamW
-from torch.cuda import is_available
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 
 import time
+import datetime
 import os
 
 from depth_estimation.model.model import UDFNet
@@ -15,21 +15,23 @@ from depth_estimation.utils.data import (
     FloatPILToTensor,
     InputTargetRandomHorizontalFlip,
     InputTargetRandomVerticalFlip,
-    # get_depth_prior_parametrization,
 )
 from depth_estimation.utils.depth_prior import get_depth_prior_from_ground_truth
 from depth_estimation.utils.loss import CombinedLoss, SILogLoss, L2Loss
 from depth_estimation.utils.visualization import get_tensorboard_grids
 from depth_estimation.utils.evaluation import get_batch_losses
 
+##########################################
+################# CONFIG #################
+##########################################
 
 # training parameters
-BATCH_SIZE = 4
+BATCH_SIZE = 6
 LEARNING_RATE = 0.0001
 LEARNING_RATE_DECAY = 1.0
 EPOCHS = 100
 LOSS_FN = CombinedLoss()
-DEVICE = "cuda" if is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # sampling parameters
 N_PRIORS_MAX = 100
@@ -42,14 +44,18 @@ VALIDATION_LOSS_FUNCTIONS = [
     L2Loss(),
     torch.nn.L1Loss(),
     SILogLoss(),
-    CombinedLoss(),  # last in list should match objective (for console output)
+    CombinedLoss(),
 ]
 VALIDATION_LOSS_FUNCTIONS_NAMES = [
-    "L2 Loss (RMSE)",
-    "L1 Loss (MAE)",
-    "SILog Loss",
-    "validation_loss",  # last in list should match objective (for console output)
+    "validation_loss/L2 Loss (RMSE)",
+    "validation_loss/L1 Loss (MAE)",
+    "validation_loss/SILog Loss",
+    "validation_loss",
 ]
+
+##########################################
+##########################################
+##########################################
 
 
 def train_UDFNet():
@@ -129,7 +135,9 @@ def train_UDFNet():
             loss_fn=LOSS_FN,
             epoch=epoch,
         )
-        print(f"Epoch time: {time.time() - start_time}")
+        print(
+            f"Epoch time: {str(datetime.timedelta(seconds=(time.time() - start_time)))}"
+        )
 
         # validate epoch
         validation_losses = validate(
@@ -147,7 +155,7 @@ def train_UDFNet():
             loss = validation_losses[i].item()
             loss_name = VALIDATION_LOSS_FUNCTIONS_NAMES[i]
 
-            summary_writer.add_scalar(f"validation_loss/{loss_name}", loss, epoch)
+            summary_writer.add_scalar(f"{loss_name}", loss, epoch)
 
         # save model
         save_model(model, epoch, run_name)
@@ -306,7 +314,7 @@ def validate(
             )
 
     avg_batch_losses = validation_losses / n_batches
-    print(f"Average batch validation loss: {avg_batch_losses[-1].item()}")
+    print(f"Average batch validation losses: {avg_batch_losses}")
     return avg_batch_losses
 
 
