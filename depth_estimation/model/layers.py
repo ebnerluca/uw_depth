@@ -4,8 +4,9 @@ import torch.nn.functional as functional
 
 
 class CombinedUpsample(nn.Sequential):
-    """Upsample an input x1 by interpolation, concatenatw with a skip connection x2,
-    followed by two convolutional layers."""
+    """Upsample an input x by interpolation, concatenate with a skip_input and additional_input
+    followed by two convolutional layers. Additional input (can be None) is interpolated to match
+    resolution of skip_input and also concatenated."""
 
     def __init__(self, in_channels, out_channels):
         super(CombinedUpsample, self).__init__()
@@ -26,17 +27,32 @@ class CombinedUpsample(nn.Sequential):
         # leaky relu B for nonlinearity
         self.leakyreluB = nn.LeakyReLU(0.2)
 
-    def forward(self, x1, x2):
+    def forward(self, x, skip_input, additional_input=None):
 
-        # upscale x1 such that it matches shape of x2
-        x1_interpolated = functional.interpolate(
-            x1,
-            size=[x2.size(2), x2.size(3)],
+        # upscale x such that it matches shape of skip connection
+        x_interpolated = functional.interpolate(
+            x,
+            size=[skip_input.size(2), skip_input.size(3)],
             mode="bilinear",
             align_corners=True,
         )
 
-        out = torch.cat([x1_interpolated, x2], dim=1)  # depth wise concatenation
+        # depth wise concatenate skip input
+        out = torch.cat([x_interpolated, skip_input], dim=1)
+
+        # additional input
+        if additional_input is not None:
+            # scale such that it matches target shape
+            additional_input_interpolated = functional.interpolate(
+                additional_input,
+                size=[skip_input.size(2), skip_input.size(3)],
+                mode="bilinear",
+                align_corners=True,
+            )
+
+            # depth wise concatenate additional input
+            out = torch.cat([out, additional_input_interpolated], dim=1)
+
         out = self.convA(out)  # convolution A
         out = self.leakyreluA(out)  # relu A
         out = self.convB(out)  # convolution B

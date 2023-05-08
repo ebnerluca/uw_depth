@@ -33,8 +33,18 @@ class UDFNet(nn.Module):
     def __init__(self, n_bins=128) -> None:
         super(UDFNet, self).__init__()
 
+        # encoder based on MobileNetV2
         self.encoder = Encoder()
-        self.decoder = Decoder()  # output N x 46 x 240 x 320
+
+        # decoder
+        prior_channels = 2
+        self.decoder = Decoder(
+            in_channels=1280,
+            out_channels=(48 - prior_channels),
+            prior_channels=prior_channels,
+        )  # output N x C x 240 x 320
+
+        # mViT
         self.mViT = mViT(
             in_channels=48,  # decoder output plus sparse prior parametrization
             embedding_dim=48,
@@ -59,7 +69,7 @@ class UDFNet(nn.Module):
         encoder_out = self.encoder(rgb)
 
         # decode
-        decoder_out = self.decoder(encoder_out)
+        decoder_out = self.decoder(encoder_out, depth_prior)
 
         # concat prior parametrization
         mvit_in = torch.cat((decoder_out, depth_prior), dim=1)

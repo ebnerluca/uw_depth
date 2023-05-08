@@ -24,7 +24,12 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(
-        self, in_channels=1280, decoder_width=0.6, single_channel_output=False
+        self,
+        in_channels=1280,
+        out_channels=48,
+        prior_channels=0,
+        decoder_width=0.6,
+        single_channel_output=False,
     ) -> None:
         super(Decoder, self).__init__()
 
@@ -35,24 +40,39 @@ class Decoder(nn.Module):
             in_channels, decoder_channels, kernel_size=1, stride=1, padding=1
         )
 
-        # upsampling layers, n input channels is current channels plus number of concatenated channels
-        self.up0 = CombinedUpsample(decoder_channels // 1 + 320, decoder_channels // 2)
-        self.up1 = CombinedUpsample(decoder_channels // 2 + 160, decoder_channels // 2)
-        self.up2 = CombinedUpsample(decoder_channels // 2 + 64, decoder_channels // 4)
-        self.up3 = CombinedUpsample(decoder_channels // 4 + 32, decoder_channels // 8)
-        self.up4 = CombinedUpsample(decoder_channels // 8 + 24, decoder_channels // 8)
+        # upsampling layers
+        # in_channels equals current channels + concat channels + prior channels
+        self.up0 = CombinedUpsample(
+            decoder_channels // 1 + 320 + prior_channels, decoder_channels // 2
+        )
+        self.up1 = CombinedUpsample(
+            decoder_channels // 2 + 160 + prior_channels, decoder_channels // 2
+        )
+        self.up2 = CombinedUpsample(
+            decoder_channels // 2 + 64 + prior_channels, decoder_channels // 4
+        )
+        self.up3 = CombinedUpsample(
+            decoder_channels // 4 + 32 + prior_channels, decoder_channels // 8
+        )
+        self.up4 = CombinedUpsample(
+            decoder_channels // 8 + 24 + prior_channels, decoder_channels // 8
+        )
         self.up5 = CombinedUpsample(
-            decoder_channels // 8 + 16, decoder_channels // 16 - 2
+            decoder_channels // 8 + 16 + prior_channels, out_channels
         )
 
         # 3x3 convolution, 1 channel output
         self.single_channel_output = single_channel_output
-        if single_channel_output:
+        if self.single_channel_output:
             self.conv3x3 = nn.Conv2d(
-                decoder_channels // 16, 1, kernel_size=3, stride=1, padding=1
+                decoder_channels // 16 - prior_channels,
+                1,
+                kernel_size=3,
+                stride=1,
+                padding=1,
             )
 
-    def forward(self, features):
+    def forward(self, features, depth_prior):
 
         # use subset of intermediate features as skip connections
         skip0 = features[2]  # size 16 x 240 x 320
@@ -66,13 +86,13 @@ class Decoder(nn.Module):
         # convolve input to match decoder channnels
         out = self.conv1x1(out)  # size c x 15 x 20
 
-        # upsample together with skip connections
-        out = self.up0(out, skip5)  # size c//2 x 15 x 20 (c: decoder_channels)
-        out = self.up1(out, skip4)  # size c//2 x 15 x 20
-        out = self.up2(out, skip3)  # size c//4 x 30 x 40
-        out = self.up3(out, skip2)  # size c//8 x 30 x 40
-        out = self.up4(out, skip1)  # size c//8 x 120 x 160
-        out = self.up5(out, skip0)  # size c//16 x 240 x 320
+        # upsample together with skip connections and depth prior
+        out = self.up0(out, skip5, depth_prior)  # size c//2 x 15 x 20
+        out = self.up1(out, skip4, depth_prior)  # size c//2 x 15 x 20
+        out = self.up2(out, skip3, depth_prior)  # size c//4 x 30 x 40
+        out = self.up3(out, skip2, depth_prior)  # size c//8 x 30 x 40
+        out = self.up4(out, skip1, depth_prior)  # size c//8 x 120 x 160
+        out = self.up5(out, skip0, depth_prior)  # size c//16 x 240 x 320
 
         # final convolution to achieve single channel
         if self.single_channel_output:
