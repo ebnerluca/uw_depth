@@ -64,7 +64,7 @@ def get_depth_prior_from_ground_truth(
     distance_maps = torch.empty(0, 1, height, width).to(
         device
     )  # euclidean pixel distance map
-    for batch in range(targets.size(0)):
+    for i in range(targets.size(0)):
 
         # get random indices
         idcs_height = torch.randint(
@@ -81,7 +81,7 @@ def get_depth_prior_from_ground_truth(
         dist_map_min, dist_argmin = torch.min(sample_dist_maps, dim=0, keepdim=True)
 
         # sample depth priors at indices
-        priors = targets[batch, 0, idcs_height, idcs_width]
+        priors = targets[i, 0, idcs_height, idcs_width]
 
         # nearest neighbor prior map
         prior_map = priors[dist_argmin]  # 1xHxW

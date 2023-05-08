@@ -220,25 +220,28 @@ def train_epoch(
         # tensorboard summary grids for visual inspection
         if not created_grid:
             if pred.shape[0] == BATCH_SIZE:
+                with torch.no_grad():  # no gradients for visualization
 
-                # get tensorboard grids
-                (
-                    target_parametrization_grid,
-                    rgb_target_pred_grid,
-                ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
+                    # get tensorboard grids
+                    (
+                        target_parametrization_grid,
+                        rgb_target_pred_error_grid,
+                    ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
 
-                # write to tensorboard
-                summary_writer.add_image(
-                    "train_target_parametrization", target_parametrization_grid, epoch
-                )
-                summary_writer.add_image(
-                    "train_rgb_target_pred", rgb_target_pred_grid, epoch
-                )
+                    # write to tensorboard
+                    summary_writer.add_image(
+                        "train_target_parametrization",
+                        target_parametrization_grid,
+                        epoch,
+                    )
+                    summary_writer.add_image(
+                        "train_rgb_target_pred_error", rgb_target_pred_error_grid, epoch
+                    )
 
-                # do only one grid to avoid data clutter
-                created_grid = True
+                    # do only one grid to avoid data clutter
+                    created_grid = True
 
-        if batch_id % 40 == 0:
+        if batch_id % 50 == 0:
             print(
                 f"batch {batch_id}/{n_batches}, batch training loss: {batch_loss.item()}"
             )
@@ -294,7 +297,7 @@ def validate(
                     # get tensorboard grids
                     (
                         target_parametrization_grid,
-                        rgb_target_pred_grid,
+                        rgb_target_pred_error_grid,
                     ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
 
                     # write to tensorboard
@@ -302,7 +305,7 @@ def validate(
                         "target_parametrization", target_parametrization_grid, epoch
                     )
                     summary_writer.add_image(
-                        "rgb_target_pred", rgb_target_pred_grid, epoch
+                        "rgb_target_pred_error", rgb_target_pred_error_grid, epoch
                     )
 
                     # do only one grid to avoid data clutter
