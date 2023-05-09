@@ -13,8 +13,8 @@ from depth_estimation.utils.data import (
     TrainDataset,
     Uint8PILToTensor,
     FloatPILToTensor,
-    InputTargetRandomHorizontalFlip,
-    InputTargetRandomVerticalFlip,
+    MutualRandomHorizontalFlip,
+    MutualRandomVerticalFlip,
 )
 from depth_estimation.utils.depth_prior import get_depth_prior_from_ground_truth
 from depth_estimation.utils.loss import CombinedLoss, SILogLoss, L2Loss
@@ -53,6 +53,22 @@ VALIDATION_LOSS_FUNCTIONS_NAMES = [
     "validation_loss",
 ]
 
+# datasets
+TRAIN_CSV_FILES = [
+    "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/train.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/train.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/train.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/train.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/train.csv",
+]
+VALIDATION_CSV_FILES = [
+    "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/validation.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/validation.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/validation.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/validation.csv",
+    "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/validation.csv",
+]
+
 ##########################################
 ##########################################
 ##########################################
@@ -80,31 +96,19 @@ def train_UDFNet():
 
     # datasets
     train_dataset = TrainDataset(
-        pairs_csv_files=[
-            "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/train.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/train.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/train.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/train.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/train.csv",
-        ],
+        pairs_csv_files=TRAIN_CSV_FILES,
         shuffle=True,
         input_transform=transforms.Compose([Uint8PILToTensor()]),
         target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
         both_transform=transforms.Compose(
             [
-                InputTargetRandomHorizontalFlip(),
-                InputTargetRandomVerticalFlip(),
+                MutualRandomHorizontalFlip(),
+                MutualRandomVerticalFlip(),
             ]
         ),
     )
     validation_dataset = TrainDataset(
-        pairs_csv_files=[
-            "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/validation.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/validation.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/validation.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/validation.csv",
-            "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/validation.csv",
-        ],
+        pairs_csv_files=VALIDATION_CSV_FILES,
         shuffle=True,
         input_transform=transforms.Compose([Uint8PILToTensor()]),
         target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
@@ -194,13 +198,12 @@ def train_epoch(
         X = data[0].to(DEVICE)  # RGB image
         y = data[1].to(DEVICE)  # depth image
 
-        # set n_priors
+        # get sparse prior parametrization
         if n_priors_max > n_priors_min:
             n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
         else:
             n_priors = n_priors_max
 
-        # get sparse prior parametrization
         prior = get_depth_prior_from_ground_truth(
             y, n_samples=n_priors, mu=0.0, std=10.0, normalize=True, device=DEVICE
         )
@@ -218,28 +221,20 @@ def train_epoch(
         optimizer.step()
 
         # tensorboard summary grids for visual inspection
-        if not created_grid:
-            if pred.shape[0] == BATCH_SIZE:
-                with torch.no_grad():  # no gradients for visualization
+        if (not created_grid) and (X.size(0) == BATCH_SIZE):
+            with torch.no_grad():  # no gradients for visualization
 
-                    # get tensorboard grids
-                    (
-                        target_parametrization_grid,
-                        rgb_target_pred_error_grid,
-                    ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
+                # get tensorboard grids
+                grids = get_tensorboard_grids(X, y, prior, pred, device=DEVICE)
 
-                    # write to tensorboard
-                    summary_writer.add_image(
-                        "train_target_parametrization",
-                        target_parametrization_grid,
-                        epoch,
-                    )
-                    summary_writer.add_image(
-                        "train_rgb_target_pred_error", rgb_target_pred_error_grid, epoch
-                    )
+                # write to tensorboard
+                summary_writer.add_image("train_rgb_target_pred_error", grids[0], epoch)
+                summary_writer.add_image(
+                    "train_target_parametrization", grids[1], epoch
+                )
 
-                    # do only one grid to avoid data clutter
-                    created_grid = True
+                # do only one grid to avoid data clutter
+                created_grid = True
 
         if batch_id % 50 == 0:
             print(
@@ -251,6 +246,7 @@ def train_epoch(
     return avg_batch_loss
 
 
+@torch.no_grad()  # no gradients needed during validation
 def validate(
     dataloader,
     model,
@@ -265,56 +261,43 @@ def validate(
     model.eval()
 
     # no gradients needed during evaluation
-    with torch.no_grad():
 
-        n_batches = len(dataloader)
-        validation_losses = torch.zeros(len(loss_functions), device=DEVICE)
-        created_grid = False
-        for batch_id, data in enumerate(dataloader):
+    n_batches = len(dataloader)
+    validation_losses = torch.zeros(len(loss_functions), device=DEVICE)
+    created_grid = False
+    for batch_id, data in enumerate(dataloader):
 
-            # move to device
-            X = data[0].to(DEVICE)  # RGB image
-            y = data[1].to(DEVICE)  # depth image
+        # move to device
+        X = data[0].to(DEVICE)  # RGB image
+        y = data[1].to(DEVICE)  # depth image
 
-            # set n_priors
-            if n_priors_max > n_priors_min:
-                n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
-            else:
-                n_priors = n_priors_max
+        # get prior parametrization
+        if n_priors_max > n_priors_min:
+            n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
+        else:
+            n_priors = n_priors_max
+        prior = get_depth_prior_from_ground_truth(
+            y, n_samples=n_priors, mu=MU, std=STD_DEV, normalize=True, device=DEVICE
+        )
 
-            # get sparse prior parametrization
-            prior = get_depth_prior_from_ground_truth(
-                y, n_samples=n_priors, mu=MU, std=STD_DEV, normalize=True, device=DEVICE
-            )
+        # prediction
+        pred = model(X, prior)
 
-            # prediction
-            pred = model(X, prior)
+        # tensorboard summary grids for visual inspection
+        if (not created_grid) and (X.size(0) == BATCH_SIZE):
 
-            # tensorboard summary grids for visual inspection
-            if not created_grid:
-                if pred.shape[0] == BATCH_SIZE:
+            # get grids
+            grids = get_tensorboard_grids(X, y, prior, pred, device=DEVICE)
 
-                    # get tensorboard grids
-                    (
-                        target_parametrization_grid,
-                        rgb_target_pred_error_grid,
-                    ) = get_tensorboard_grids(X, y, prior, pred, nrow=BATCH_SIZE)
+            # write to tensorboard
+            summary_writer.add_image("rgb_target_pred_error", grids[0], epoch)
+            summary_writer.add_image("target_parametrization", grids[1], epoch)
 
-                    # write to tensorboard
-                    summary_writer.add_image(
-                        "target_parametrization", target_parametrization_grid, epoch
-                    )
-                    summary_writer.add_image(
-                        "rgb_target_pred_error", rgb_target_pred_error_grid, epoch
-                    )
+            # do only one grid to avoid data clutter
+            created_grid = True
 
-                    # do only one grid to avoid data clutter
-                    created_grid = True
-
-            # add loss
-            validation_losses += get_batch_losses(
-                pred, y, loss_functions, device=DEVICE
-            )
+        # add loss
+        validation_losses += get_batch_losses(pred, y, loss_functions, device=DEVICE)
 
     avg_batch_losses = validation_losses / n_batches
     print(f"Average batch validation losses: {avg_batch_losses}")

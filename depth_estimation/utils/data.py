@@ -69,7 +69,7 @@ class TrainDataset:
         return True
 
 
-class InputTargetRandomHorizontalFlip:
+class MutualRandomHorizontalFlip:
     """Randomly flips an input RGB imape and corresponding depth target horizontally with probability p.\\
     (Either both are transformed or neither of them)"""
 
@@ -87,7 +87,7 @@ class InputTargetRandomHorizontalFlip:
         return input_target
 
 
-class InputTargetRandomVerticalFlip:
+class MutualRandomVerticalFlip:
     """Randomly flips an input RGB imape and corresponding depth target vertically with probability p.\\
     (Either both are transformed or neither of them)"""
 

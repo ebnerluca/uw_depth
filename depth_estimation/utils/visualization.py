@@ -56,14 +56,16 @@ from torchvision.utils import make_grid
 #     return out
 
 
-def gray_to_heatmap(gray, colormap="inferno_r", normalize=False):
-    """Takes torch tensor input of shape [Nx1HxW], returns heatmap tensor of shape [Nx3xHxW]."""
+def gray_to_heatmap(gray, colormap="inferno_r", normalize=False, device="cpu"):
+    """Takes torch tensor input of shape [Nx1HxW], returns heatmap tensor of shape [Nx3xHxW].\\
+    colormap 'inferno_r': [0,1] --> [bright, dark], e.g. for depths\\
+    colormap 'inferno': [0,1] --> [dark, bright], e.g. for signals"""
 
     # get colormap
     colormap = plt.get_cmap(colormap)
 
     # gray imgs
-    gray_imgs = [gray_img for gray_img in gray]
+    gray_imgs = [gray_img.cpu() for gray_img in gray]
 
     # normalize image wise
     if normalize:
@@ -77,12 +79,12 @@ def gray_to_heatmap(gray, colormap="inferno_r", normalize=False):
     heatmaps = np.stack(heatmaps, axis=0)
 
     # convert to tensor
-    heatmaps = torch.from_numpy(heatmaps).permute(0, 3, 1, 2)
+    heatmaps = torch.from_numpy(heatmaps).permute(0, 3, 1, 2).to(device)
 
     return heatmaps
 
 
-def get_tensorboard_grids(X, y, prior, pred, nrow):
+def get_tensorboard_grids(X, y, prior, pred, device="cpu"):
     """Generates tensorboard grids for tensorboard summary writer.
 
     Inputs:
@@ -110,19 +112,22 @@ def get_tensorboard_grids(X, y, prior, pred, nrow):
     )
 
     # get heatmaps
-    y_heatmap = gray_to_heatmap(y)
-    pred_heatmap = gray_to_heatmap(pred)
-    prior_heatmap = gray_to_heatmap(prior_map)
-    dist_heatmap = gray_to_heatmap(dist_map)
-    error_heatmap = gray_to_heatmap(error, colormap="inferno", normalize=True)
+    y_heatmap = gray_to_heatmap(y, device=device)
+    pred_heatmap = gray_to_heatmap(pred, device=device)
+    prior_heatmap = gray_to_heatmap(prior_map, device=device)
+    dist_heatmap = gray_to_heatmap(dist_map, colormap="inferno", device=device)
+    error_heatmap = gray_to_heatmap(
+        error, colormap="inferno", normalize=True, device=device
+    )
 
     # grids
-    target_parametrization_grid = make_grid(
-        torch.cat((y_heatmap, prior_heatmap, dist_heatmap), dim=0), nrow=nrow
-    )
+    nrow = X.size(0)
     rgb_target_pred_error_grid = make_grid(
         torch.cat((rgb_resized, y_heatmap, pred_heatmap, error_heatmap), dim=0),
         nrow=nrow,
     )
+    prior_parametrization_grid = make_grid(
+        torch.cat((y_heatmap, prior_heatmap, dist_heatmap), dim=0), nrow=nrow
+    )
 
-    return target_parametrization_grid, rgb_target_pred_error_grid
+    return rgb_target_pred_error_grid, prior_parametrization_grid
