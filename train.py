@@ -204,7 +204,7 @@ def train_epoch(
         else:
             n_priors = n_priors_max
 
-        prior = get_depth_prior_from_ground_truth(
+        prior, _ = get_depth_prior_from_ground_truth(
             y, n_samples=n_priors, mu=0.0, std=10.0, normalize=True, device=DEVICE
         )
 
@@ -276,7 +276,7 @@ def validate(
             n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
         else:
             n_priors = n_priors_max
-        prior = get_depth_prior_from_ground_truth(
+        prior, _ = get_depth_prior_from_ground_truth(
             y, n_samples=n_priors, mu=MU, std=STD_DEV, normalize=True, device=DEVICE
         )
 

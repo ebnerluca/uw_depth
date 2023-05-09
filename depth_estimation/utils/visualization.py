@@ -56,7 +56,7 @@ from torchvision.utils import make_grid
 #     return out
 
 
-def gray_to_heatmap(gray, colormap="inferno_r", normalize=False, device="cpu"):
+def gray_to_heatmap(gray, colormap="inferno_r", normalize=True, device="cpu"):
     """Takes torch tensor input of shape [Nx1HxW], returns heatmap tensor of shape [Nx3xHxW].\\
     colormap 'inferno_r': [0,1] --> [bright, dark], e.g. for depths\\
     colormap 'inferno': [0,1] --> [dark, bright], e.g. for signals"""
@@ -116,9 +116,7 @@ def get_tensorboard_grids(X, y, prior, pred, device="cpu"):
     pred_heatmap = gray_to_heatmap(pred, device=device)
     prior_heatmap = gray_to_heatmap(prior_map, device=device)
     dist_heatmap = gray_to_heatmap(dist_map, colormap="inferno", device=device)
-    error_heatmap = gray_to_heatmap(
-        error, colormap="inferno", normalize=True, device=device
-    )
+    error_heatmap = gray_to_heatmap(error, colormap="inferno", device=device)
 
     # grids
     nrow = X.size(0)
@@ -127,7 +125,8 @@ def get_tensorboard_grids(X, y, prior, pred, device="cpu"):
         nrow=nrow,
     )
     prior_parametrization_grid = make_grid(
-        torch.cat((y_heatmap, prior_heatmap, dist_heatmap), dim=0), nrow=nrow
+        torch.cat((y_heatmap, prior_heatmap, dist_heatmap), dim=0),
+        nrow=nrow,
     )
 
     return rgb_target_pred_error_grid, prior_parametrization_grid

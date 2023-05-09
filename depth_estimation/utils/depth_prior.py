@@ -56,14 +56,23 @@ def get_depth_prior_from_ground_truth(
     Inpired by: https://arxiv.org/abs/1804.02771
     """
 
+    # batch size
+    batch_size = targets.size(0)
+
     # output size
     height = targets.size(2)
     width = targets.size(3)
 
-    prior_maps = torch.empty(0, 1, height, width).to(device)  # depth prior map
-    distance_maps = torch.empty(0, 1, height, width).to(
-        device
-    )  # euclidean pixel distance map
+    # depth prior maps
+    prior_maps = torch.empty(batch_size, 1, height, width).to(device)
+
+    # euclidean distance maps
+    distance_maps = torch.empty(batch_size, 1, height, width).to(device)
+
+    # features lists with pixel indices and depth values
+    features = torch.empty(batch_size, n_samples, 3).to(device)
+
+    # for each image
     for i in range(targets.size(0)):
 
         # get random indices
@@ -81,10 +90,10 @@ def get_depth_prior_from_ground_truth(
         dist_map_min, dist_argmin = torch.min(sample_dist_maps, dim=0, keepdim=True)
 
         # sample depth priors at indices
-        priors = targets[i, 0, idcs_height, idcs_width]
+        depth_values = targets[i, 0, idcs_height, idcs_width]
 
         # nearest neighbor prior map
-        prior_map = priors[dist_argmin]  # 1xHxW
+        prior_map = depth_values[dist_argmin]  # 1xHxW
 
         # linear distance model:
         # normalize and invert prior map (close points should have strong signals)
@@ -98,15 +107,19 @@ def get_depth_prior_from_ground_truth(
             prior_map = (prior_map - min) / (max - min + eps)
 
         # concat
-        prior_maps = torch.cat((prior_maps, prior_map.unsqueeze(0)), dim=0)
-        distance_maps = torch.cat((distance_maps, dist_map_min.unsqueeze(0)), dim=0)
+        prior_maps[i, ...] = prior_map
+        distance_maps[i, ...] = dist_map_min
+        features[i, :, 0] = idcs_height
+        features[i, :, 1] = idcs_width
+        features[i, :, 2] = depth_values
 
     # probability model:
     # convert pixel distance to signal strength
     signal_strength_maps = get_signal_maps(distance_maps, mu=mu, std=std, device=device)
 
     parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW
-    return parametrization
+
+    return parametrization, features
 
 
 def get_depth_prior_from_features(
@@ -145,7 +158,7 @@ def test_get_priors(device="cpu"):
 
     # get priors and dist_map
     starttime = time.time()
-    prior = get_depth_prior_from_ground_truth(
+    prior, _ = get_depth_prior_from_ground_truth(
         targets, n_samples=100, mu=0.0, std=10.0, normalize=True, device=device
     )
     prior_maps = prior[:, 0, ...].unsqueeze(1)

@@ -16,8 +16,8 @@ from depth_estimation.utils.visualization import get_tensorboard_grids
 ##########################################
 
 BATCH_SIZE = 6
-# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DEVICE = "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+# DEVICE = "cpu"
 LOSS_FUNCTIONS = [
     L2Loss(),
     torch.nn.L1Loss(),
@@ -32,7 +32,7 @@ LOSS_FUNCTIONS_NAMES = [
 ]
 MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/multi_fusion/saved_models/model_e99_udfnet_np100-100_lr0.0001_bs6_lrd1.0.pth"
 TEST_CSV_FILES = [
-    "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/test.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/test.csv",
     "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/test.csv",
     "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/test.csv",
     "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/test.csv",
@@ -53,7 +53,7 @@ def test_UDFNet():
 
     # model
     print("Loading saved model ...")
-    model = UDFNet(n_bins=80).to(DEVICE)
+    model = UDFNet(n_bins=80, true_scale_output=True).to(DEVICE)
     model.load_state_dict(torch.load(MODEL_PATH))
     model.eval()
     print("Loading saved model done.")
@@ -62,7 +62,7 @@ def test_UDFNet():
     dataset = TrainDataset(
         pairs_csv_files=TEST_CSV_FILES,
         input_transform=Uint8PILToTensor(),
-        target_transform=FloatPILToTensor(normalize=True),
+        target_transform=FloatPILToTensor(normalize=False),
     )
 
     # dataloader
@@ -86,13 +86,13 @@ def test_UDFNet():
             n_priors = torch.randint(N_PRIORS_MIN, N_PRIORS_MAX, (1,)).item()
         else:
             n_priors = N_PRIORS_MAX
-        prior = get_depth_prior_from_ground_truth(
+        prior, features = get_depth_prior_from_ground_truth(
             y, n_samples=n_priors, mu=MU, std=STD_DEV, device=DEVICE
         )
 
         # prediction
         start_time = time.time()
-        pred = model(X, prior)
+        pred = model(X, prior, features)
         prediction_time += time.time() - start_time
 
         # sum up losses

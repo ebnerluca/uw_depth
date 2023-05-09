@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as functional
+from torch.linalg import lstsq
 from .encoder_decoder import Encoder, Decoder
 from .mViT import mViT
 
@@ -30,7 +31,7 @@ class SimpleEncoderDecoder(nn.Module):
 class UDFNet(nn.Module):
     """Underwater Depth Fusion Net"""
 
-    def __init__(self, n_bins=128) -> None:
+    def __init__(self, n_bins=128, true_scale_output=False) -> None:
         super(UDFNet, self).__init__()
 
         # encoder based on MobileNetV2
@@ -59,37 +60,35 @@ class UDFNet(nn.Module):
         )
 
         self.n_bins = n_bins
+        self.true_scale_output = true_scale_output
 
-    def forward(self, rgb, depth_prior):
+    def forward(self, rgb, prior_parametrization, prior_features=None):
         """Input:
         - rgb: RGB input image, Nx3x480x640
-        - depth_prior: Parametrization of sparse prior guidance signal, Nx2x240x320"""
+        - prior_parametrization: Parametrization of sparse prior guidance signal, Nx2x240x320
+        - prior_features: list of features with their pixel position and depth value NxSx3, only used when outputting true scale ground_truth."""
 
         # encode
         encoder_out = self.encoder(rgb)
 
         # decode
-        decoder_out = self.decoder(encoder_out, depth_prior)
+        decoder_out = self.decoder(encoder_out, prior_parametrization)
 
         # concat prior parametrization
-        mvit_in = torch.cat((decoder_out, depth_prior), dim=1)
+        mvit_in = torch.cat((decoder_out, prior_parametrization), dim=1)
 
         # normed bin widths, range attention maps
         bin_widths_normed, range_attention_maps = self.mViT(mvit_in)
 
         # bin centers in [0,1]
-        # print(f"bin_widths normed: {bin_widths_normed}")
         bin_edges_normed = torch.cumsum(bin_widths_normed, dim=1)
         bin_edges_normed = functional.pad(
             bin_edges_normed, (1, 0), value=0.0
         )  # add edge at zero
-        # print(f"bin_edges normed: {bin_edges_normed}")
         bin_centers_normed = 0.5 * (bin_edges_normed[:, :-1] + bin_edges_normed[:, 1:])
-        # print(f"bin centers normed: {bin_centers_normed}")
 
         # depth classification scores
         depth_scores = self.conv_out(range_attention_maps)
-        # print(f"depth scores: {depth_scores.shape}")
 
         # linear combination
         prediction = torch.sum(
@@ -98,7 +97,39 @@ class UDFNet(nn.Module):
             dim=1,
             keepdim=True,
         )
-        # print(f"prediction: {prediction.shape}")
+
+        # recover true scale for each image in batch
+        if self.true_scale_output:
+            for i in range(prediction.size(0)):
+
+                n_features = len(prior_features[i])
+
+                # depth values of features
+                feature_depth_values = prior_features[i, :, 2]
+
+                # depth values of prediction at same location as in prior
+                idcs_height = prior_features[i, :, 0].long()
+                idcs_width = prior_features[i, :, 1].long()
+                predicted_depth_values = prediction[
+                    i, 0, idcs_height, idcs_width
+                ].unsqueeze(1)
+
+                # find least square solution for scale and offset
+                # [prediction, 1]*[scale, offset] = true values
+                # Ax = B
+                A = torch.cat(
+                    (
+                        predicted_depth_values,
+                        torch.ones(n_features, 1, device=predicted_depth_values.device),
+                    ),
+                    dim=1,
+                )
+                scale_and_offset = lstsq(A, feature_depth_values.unsqueeze(1)).solution
+
+                # apply scale and offset to prediction
+                prediction[i, ...] = (
+                    prediction[i, ...] * scale_and_offset[0] + scale_and_offset[1]
+                )
 
         return prediction
 
