@@ -84,7 +84,7 @@ def gray_to_heatmap(gray, colormap="inferno_r", normalize=True, device="cpu"):
     return heatmaps
 
 
-def get_tensorboard_grids(X, y, prior, pred, device="cpu"):
+def get_tensorboard_grids(X, y, prior, pred, mask, device="cpu"):
     """Generates tensorboard grids for tensorboard summary writer.
 
     Inputs:
@@ -101,6 +101,7 @@ def get_tensorboard_grids(X, y, prior, pred, device="cpu"):
 
     # error
     error = torch.abs(y - pred)
+    error[~mask] = 0.0
 
     # target parametrization
     prior_map = prior[:, 0, ...].unsqueeze(1)
@@ -117,6 +118,7 @@ def get_tensorboard_grids(X, y, prior, pred, device="cpu"):
     prior_heatmap = gray_to_heatmap(prior_map, device=device)
     dist_heatmap = gray_to_heatmap(dist_map, colormap="inferno", device=device)
     error_heatmap = gray_to_heatmap(error, colormap="inferno", device=device)
+    mask_heatmap = gray_to_heatmap(mask.int(), colormap="inferno", device=device)
 
     # grids
     nrow = X.size(0)
@@ -125,7 +127,7 @@ def get_tensorboard_grids(X, y, prior, pred, device="cpu"):
         nrow=nrow,
     )
     prior_parametrization_grid = make_grid(
-        torch.cat((y_heatmap, prior_heatmap, dist_heatmap), dim=0),
+        torch.cat((y_heatmap, prior_heatmap, dist_heatmap, mask_heatmap), dim=0),
         nrow=nrow,
     )
 

@@ -44,7 +44,7 @@ def get_signal_maps(dist_map, mu=0.0, std=1.0, device="cpu"):
 
 
 def get_depth_prior_from_ground_truth(
-    targets, n_samples=200, mu=0.0, std=1.0, normalize=True, device="cpu"
+    targets, n_samples=200, mu=0.0, std=1.0, normalize=True, masks=None, device="cpu"
 ):
     """Takes an Nx1xHxW ground truth depth tensor and desired number of samples,
     returns two images per batch represention a prior guess parametrization:
@@ -62,6 +62,7 @@ def get_depth_prior_from_ground_truth(
     # output size
     height = targets.size(2)
     width = targets.size(3)
+    n_pixels = height * width
 
     # depth prior maps
     prior_maps = torch.empty(batch_size, 1, height, width).to(device)
@@ -72,14 +73,23 @@ def get_depth_prior_from_ground_truth(
     # features lists with pixel indices and depth values
     features = torch.empty(batch_size, n_samples, 3).to(device)
 
+    # utility to select pixel locations and avoid slow torch.where
+    pixel_idcs = torch.arange(n_pixels).to(device)
+
     # for each image
     for i in range(targets.size(0)):
 
-        # get random indices
-        idcs_height = torch.randint(
-            low=0, high=height, size=(n_samples,), device=device
-        )
-        idcs_width = torch.randint(low=0, high=width, size=(n_samples,), device=device)
+        # get random indices (flattened)
+        if masks is not None:
+            valid_pixel_idcs = pixel_idcs[masks[i, 0, ...].flatten()]
+        else:
+            valid_pixel_idcs = pixel_idcs
+        idcs_selection = torch.randperm(valid_pixel_idcs.size(0))[:n_samples]
+        idcs = valid_pixel_idcs[idcs_selection]
+
+        # convert flattened indices to height and width indices
+        idcs_height = idcs.div(width, rounding_mode="floor")
+        idcs_width = idcs.remainder(width)
 
         # get n_samples x height x width dist maps
         sample_dist_maps = get_distance_maps(
@@ -152,14 +162,21 @@ def test_get_priors(device="cpu"):
     target1 = torch.linspace(0, 0.5, 320).repeat(240, 1) + torch.linspace(
         0, 0.5, 240
     ).repeat(320, 1).transpose(0, 1)
-    target1 = target1[None, None, ...] * 3.0  # add batch and channel dimension
+    target1 = target1[None, None, ...]  # add batch and channel dimension
     target2 = 1.0 - target1
     targets = torch.cat((target1, target1, target2, target2), dim=0).to(device)
+    masks = targets > 0.5
 
     # get priors and dist_map
     starttime = time.time()
     prior, _ = get_depth_prior_from_ground_truth(
-        targets, n_samples=100, mu=0.0, std=10.0, normalize=True, device=device
+        targets,
+        n_samples=100,
+        mu=0.0,
+        std=10.0,
+        normalize=True,
+        masks=masks,
+        device=device,
     )
     prior_maps = prior[:, 0, ...].unsqueeze(1)
     signal_maps = prior[:, 1, ...].unsqueeze(1)
@@ -172,8 +189,7 @@ def test_get_priors(device="cpu"):
     signal_maps = signal_maps.cpu()
 
     # plot
-    # for i in range(targets.size(0)):
-    for i in range(1):
+    for i in range(targets.size(0)):
 
         target = targets[i, ...]
         prior_map = prior_maps[i, ...]

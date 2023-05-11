@@ -11,7 +11,13 @@ import random
 from os.path import exists
 
 
-class TrainDataset:
+class InputTargetDataset:
+    """Parameters:
+    - pairs_csv_files: List of filepaths to csv files which list image pairs (input and target)
+    - input_transform: Transform to apply to the input RGB image, needs to return torch Tensor
+    - target_transform: Transform to apply to the target depth image, needs to return torch Tensor and corresponding mask
+    - both_transform: Transform to apply to both input and target image, needs to return torch Tensor"""
+
     def __init__(
         self,
         pairs_csv_files,
@@ -50,15 +56,26 @@ class TrainDataset:
 
         # read imgs
         input_img = Image.open(input_fn).resize((640, 480))
-        target_img = Image.open(target_fn).resize((320, 240))
+        target_img = Image.open(target_fn).resize((320, 240), resample=Image.NEAREST)
 
         # apply transforms
         input_img = self.input_transform(input_img)
-        target_img = self.target_transform(target_img)
-        if self.both_transform is not None:
-            input_img, target_img = self.both_transform([input_img, target_img])
+        target_img, mask = self.target_transform(target_img)
 
-        return input_img, target_img
+        if (input_img is None) or (target_img is None) or (mask is None):
+            print(f"Loading img pair failed, received None. paths:")
+            print(input_fn)
+            print(target_fn)
+            print("Trying other image as substitution ...")
+            random_idx = np.random.randint(0, len(self))
+            input_img, target_img, mask = self[random_idx]
+
+        if self.both_transform is not None:
+            input_img, target_img, mask = self.both_transform(
+                [input_img, target_img, mask]
+            )
+
+        return input_img, target_img, mask
 
     def check_dataset(self):
         """Checks dataset for missing files."""
@@ -76,15 +93,15 @@ class MutualRandomHorizontalFlip:
     def __init__(self, p=0.5) -> None:
         self.p = p
 
-    def __call__(self, input_target):
+    def __call__(self, tensors):
 
         do_flip = torch.rand(1) < self.p  # do flip or not
 
         if do_flip:
-            input_target[0] = hflip(input_target[0])
-            input_target[1] = hflip(input_target[1])
+            for i in range(len(tensors)):
+                tensors[i] = hflip(tensors[i])
 
-        return input_target
+        return tensors
 
 
 class MutualRandomVerticalFlip:
@@ -94,15 +111,15 @@ class MutualRandomVerticalFlip:
     def __init__(self, p=0.5) -> None:
         self.p = p
 
-    def __call__(self, input_target):
+    def __call__(self, tensors):
 
         do_flip = torch.rand(1) < self.p  # do flip or not
 
         if do_flip:
-            input_target[0] = vflip(input_target[0])
-            input_target[1] = vflip(input_target[1])
+            for i in range(len(tensors)):
+                tensors[i] = vflip(tensors[i])
 
-        return input_target
+        return tensors
 
 
 class Uint8PILToTensor:
@@ -112,7 +129,7 @@ class Uint8PILToTensor:
         # convert to np array
         img_np = np.array(img)
 
-        # enforce dimension order
+        # enforce dimension order: ch x H x W
         img_np = img_np.transpose((2, 0, 1))
 
         # convert to tensor
@@ -130,27 +147,47 @@ class FloatPILToTensor:
     Specify zero_add value to add to pixels which would otherwise be exactly zero,
     this can avoid issues e.g. when using the log() function since log(0) is undefined."""
 
-    def __init__(self, normalize=False):
+    def __init__(self, normalize=False, invalid_value=0.0):
         self.normalize = normalize
+        self.invalid_value = invalid_value
 
     def __call__(self, img):
+
         # convert to np array
         img_np = np.array(img)
 
-        # normalize
+        # mask valid values, depth <= 0 means invalid
+        mask = img_np > 0.0
+
+        # normalize mask, set invalid to given value
         if self.normalize:
-            min = img_np.min()
-            max = img_np.max()
-            img_np = (img_np - min) / (max - min)
+            try:
+                min = img_np[mask].min()
+                max = img_np[mask].max()
+                img_np = (img_np - min) / (max - min)
+                img_np[~mask] = self.invalid_value
+            except ValueError:
+                # for very odd frames the whole ground truth is invalid
+                # the whole mask is False, leading to empty arrays
+                # if this occurs, return None
+                print(
+                    "Error, img has invalid value range: "
+                    + f"[{img_np.min()}, {img_np.max()}]\n"
+                    + "Returning None."
+                )
+                return None, None
 
         # enforce dimension order: channels x height x width
         if img_np.ndim == 2:
             img_np = img_np[np.newaxis, ...]
+        if mask.ndim == 2:
+            mask = mask[np.newaxis, ...]
 
         # convert to tensor
         img_tensor = torch.from_numpy(img_np)
+        mask = torch.from_numpy(mask)
 
-        return img_tensor
+        return img_tensor, mask
 
 
 def test_dataset(device="cpu"):
@@ -163,7 +200,7 @@ def test_dataset(device="cpu"):
     import matplotlib.pyplot as plt
 
     # define dataset
-    dataset = TrainDataset(
+    dataset = InputTargetDataset(
         pairs_csv_files=[
             "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/test.csv",
         ],
@@ -172,8 +209,8 @@ def test_dataset(device="cpu"):
         target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
         both_transform=transforms.Compose(
             [
-                InputTargetRandomHorizontalFlip(),
-                InputTargetRandomVerticalFlip(),
+                MutualRandomHorizontalFlip(),
+                MutualRandomVerticalFlip(),
             ]
         ),
     )

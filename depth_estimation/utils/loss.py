@@ -14,11 +14,16 @@ class CombinedLoss(nn.Module):
         self.silog_loss = SILogLoss()
         self.l2_loss = L2Loss()
 
-    def forward(self, pred, target):
+    def forward(self, prediction, target, mask=None):
+
+        # apply mask
+        if mask is not None:
+            prediction = prediction[mask]
+            target = target[mask]
 
         # loss components
-        silog_loss = self.silog_loss(pred, target)
-        l2_loss = self.l2_loss(pred, target)
+        silog_loss = self.silog_loss(prediction, target)
+        l2_loss = self.l2_loss(prediction, target)
 
         # combined loss
         loss = 0.4 * l2_loss + 0.6 * silog_loss
@@ -37,10 +42,15 @@ class SILogLoss(nn.Module):
 
         self.eps = eps  # avoid log(0)
 
-    def forward(self, pred, target):
+    def forward(self, prediction, target, mask=None):
+
+        # apply mask
+        if mask is not None:
+            prediction = prediction[mask]
+            target = target[mask]
 
         # elementwise log difference
-        d = torch.log(pred + self.eps) - torch.log(target + self.eps)
+        d = torch.log(prediction + self.eps) - torch.log(target + self.eps)
 
         # loss
         loss = torch.mean(torch.pow(d, 2)) - 0.85 * torch.pow(torch.mean(d), 2)
@@ -61,6 +71,13 @@ class L2Loss(nn.Module):
         # l2 loss is sqrt of mse loss
         self.mse_loss = nn.MSELoss()
 
-    def forward(self, pred, target):
+    def forward(self, prediction, target, mask=None):
 
-        return torch.sqrt(self.mse_loss(pred, target))
+        # apply mask
+        if mask is not None:
+            prediction = prediction[mask]
+            target = target[mask]
+
+        loss = torch.sqrt(self.mse_loss(prediction, target))
+
+        return loss
