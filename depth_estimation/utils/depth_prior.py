@@ -79,11 +79,22 @@ def get_depth_prior_from_ground_truth(
     # for each image
     for i in range(targets.size(0)):
 
-        # get random indices (flattened)
+        # identify valid pixels
         if masks is not None:
             valid_pixel_idcs = pixel_idcs[masks[i, 0, ...].flatten()]
+            n_valid_pixels = len(valid_pixel_idcs)
+            if n_valid_pixels < n_samples:
+                print(
+                    f"WARNING: Could not find enough valid pixels in depth map. "
+                    + f"Need at least {n_samples}, but found only {n_valid_pixels} samples. "
+                    + f"Reducing n_samples to {n_valid_pixels} for this batch."
+                )
+                n_samples = n_valid_pixels
+                features = features[:, :n_samples, :]
         else:
             valid_pixel_idcs = pixel_idcs
+
+        # get random indices
         idcs_selection = torch.randperm(valid_pixel_idcs.size(0))[:n_samples]
         idcs = valid_pixel_idcs[idcs_selection]
 
