@@ -4,8 +4,8 @@ import time
 import cv2
 import pandas as pd
 
-from .error_metrics import *
-from ..utils import resize_to_smaller
+from .deprecated_error_metrics import *
+from ..utils.deprecated_utils import resize_to_smaller
 
 
 class Evaluation:
