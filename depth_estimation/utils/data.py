@@ -165,7 +165,6 @@ class FloatPILToTensor:
                 min = img_np[mask].min()
                 max = img_np[mask].max()
                 img_np = (img_np - min) / (max - min)
-                img_np[~mask] = self.invalid_value
             except ValueError:
                 # for very odd frames the whole ground truth is invalid
                 # the whole mask is False, leading to empty arrays
@@ -176,6 +175,9 @@ class FloatPILToTensor:
                     + "Returning None."
                 )
                 return None, None
+
+        # change value for invalid pixels
+        img_np[~mask] = self.invalid_value
 
         # enforce dimension order: channels x height x width
         if img_np.ndim == 2:
