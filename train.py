@@ -10,7 +10,7 @@ import os
 
 from depth_estimation.model.model import UDFNet
 from depth_estimation.utils.data import (
-    TrainDataset,
+    InputTargetDataset,
     Uint8PILToTensor,
     FloatPILToTensor,
     MutualRandomHorizontalFlip,
@@ -30,7 +30,7 @@ BATCH_SIZE = 6
 LEARNING_RATE = 0.0001
 LEARNING_RATE_DECAY = 1.0
 EPOCHS = 100
-LOSS_FN = CombinedLoss()
+LOSS_FN = CombinedLoss(w_silog=0.6, w_l2=0.4, w_masked=0.9)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # sampling parameters
@@ -44,7 +44,7 @@ VALIDATION_LOSS_FUNCTIONS = [
     L2Loss(),
     torch.nn.L1Loss(),
     SILogLoss(),
-    CombinedLoss(),
+    CombinedLoss(w_silog=0.6, w_l2=0.4, w_masked=0.9),
 ]
 VALIDATION_LOSS_FUNCTIONS_NAMES = [
     "validation_loss/L2 Loss (RMSE)",
@@ -55,18 +55,30 @@ VALIDATION_LOSS_FUNCTIONS_NAMES = [
 
 # datasets
 TRAIN_CSV_FILES = [
-    "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/train.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/train.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/train.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/train.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/train.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/train.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/train.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/train.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/train.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/train.csv",
+    "/home/auv/FLSea/archive/canyons/flatiron/flatiron/imgs/train.csv",
+    "/home/auv/FLSea/archive/canyons/horse_canyon/horse_canyon/imgs/train.csv",
+    "/home/auv/FLSea/archive/canyons/tiny_canyon/tiny_canyon/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/big_dice_loop/big_dice_loop/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/coral_table_loop/coral_table_loop/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/cross_pyramid_loop/cross_pyramid_loop/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/dice_path/dice_path/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/landward_path/landward_path/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/pier_path/pier_path/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/sub_pier/sub_pier/imgs/train.csv",
 ]
 VALIDATION_CSV_FILES = [
-    "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/validation.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/validation.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/validation.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/validation.csv",
-    "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/validation.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/validation.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/validation.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/validation.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/validation.csv",
+    # "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/validation.csv",
+    "/home/auv/FLSea/archive/canyons/u_canyon/u_canyon/imgs/train.csv",
+    "/home/auv/FLSea/archive/red_sea/northeast_path/northeast_path/imgs/train.csv",
 ]
 
 ##########################################
@@ -95,23 +107,27 @@ def train_UDFNet():
     model = UDFNet(n_bins=80).to(DEVICE)
 
     # datasets
-    train_dataset = TrainDataset(
+    train_dataset = InputTargetDataset(
         pairs_csv_files=TRAIN_CSV_FILES,
         shuffle=True,
         input_transform=transforms.Compose([Uint8PILToTensor()]),
-        target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
+        target_transform=transforms.Compose(
+            [FloatPILToTensor(normalize=True, invalid_value=1.0)]
+        ),
         both_transform=transforms.Compose(
             [
                 MutualRandomHorizontalFlip(),
-                MutualRandomVerticalFlip(),
+                # MutualRandomVerticalFlip(),
             ]
         ),
     )
-    validation_dataset = TrainDataset(
+    validation_dataset = InputTargetDataset(
         pairs_csv_files=VALIDATION_CSV_FILES,
         shuffle=True,
         input_transform=transforms.Compose([Uint8PILToTensor()]),
-        target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
+        target_transform=transforms.Compose(
+            [FloatPILToTensor(normalize=True, invalid_value=1.0)]
+        ),
     )
 
     # dataloaders
@@ -191,12 +207,12 @@ def train_epoch(
 
     n_batches = len(dataloader)
     training_loss = 0.0
-    created_grid = False
     for batch_id, data in enumerate(dataloader):
 
         # move to device
         X = data[0].to(DEVICE)  # RGB image
         y = data[1].to(DEVICE)  # depth image
+        mask = data[2].to(DEVICE)  # mask for valid values
 
         # get sparse prior parametrization
         if n_priors_max > n_priors_min:
@@ -205,14 +221,20 @@ def train_epoch(
             n_priors = n_priors_max
 
         prior, _ = get_depth_prior_from_ground_truth(
-            y, n_samples=n_priors, mu=0.0, std=10.0, normalize=True, device=DEVICE
+            y,
+            n_samples=n_priors,
+            mu=0.0,
+            std=10.0,
+            normalize=True,
+            masks=mask,
+            device=DEVICE,
         )
 
         # prediction
         pred = model(X, prior)  # pred is of size [n_batches, channels, height, width]
 
         # loss
-        batch_loss = loss_fn(pred, y)
+        batch_loss = loss_fn(pred, y, mask)
         training_loss += batch_loss.item()
 
         # backpropagation
@@ -221,20 +243,19 @@ def train_epoch(
         optimizer.step()
 
         # tensorboard summary grids for visual inspection
-        if (not created_grid) and (X.size(0) == BATCH_SIZE):
+        if (batch_id % 500 == 0) and (X.size(0) == BATCH_SIZE):
             with torch.no_grad():  # no gradients for visualization
 
                 # get tensorboard grids
-                grids = get_tensorboard_grids(X, y, prior, pred, device=DEVICE)
+                grids = get_tensorboard_grids(X, y, prior, pred, mask, device=DEVICE)
 
                 # write to tensorboard
-                summary_writer.add_image("train_rgb_target_pred_error", grids[0], epoch)
                 summary_writer.add_image(
-                    "train_target_parametrization", grids[1], epoch
+                    f"train_rgb_target_pred_error/{batch_id}", grids[0], epoch
                 )
-
-                # do only one grid to avoid data clutter
-                created_grid = True
+                summary_writer.add_image(
+                    f"train_target_parametrization/{batch_id}", grids[1], epoch
+                )
 
         if batch_id % 50 == 0:
             print(
@@ -264,12 +285,12 @@ def validate(
 
     n_batches = len(dataloader)
     validation_losses = torch.zeros(len(loss_functions), device=DEVICE)
-    created_grid = False
     for batch_id, data in enumerate(dataloader):
 
         # move to device
         X = data[0].to(DEVICE)  # RGB image
         y = data[1].to(DEVICE)  # depth image
+        mask = data[2].to(DEVICE)  # mask for valid values
 
         # get prior parametrization
         if n_priors_max > n_priors_min:
@@ -277,27 +298,40 @@ def validate(
         else:
             n_priors = n_priors_max
         prior, _ = get_depth_prior_from_ground_truth(
-            y, n_samples=n_priors, mu=MU, std=STD_DEV, normalize=True, device=DEVICE
+            y,
+            n_samples=n_priors,
+            mu=MU,
+            std=STD_DEV,
+            normalize=True,
+            masks=mask,
+            device=DEVICE,
         )
 
         # prediction
         pred = model(X, prior)
 
+        # add loss
+        batch_losses = get_batch_losses(pred, y, loss_functions, mask, device=DEVICE)
+        validation_losses += batch_losses
+
         # tensorboard summary grids for visual inspection
-        if (not created_grid) and (X.size(0) == BATCH_SIZE):
+        if (batch_id % 500 == 0) and (X.size(0) == BATCH_SIZE):
 
             # get grids
-            grids = get_tensorboard_grids(X, y, prior, pred, device=DEVICE)
+            grids = get_tensorboard_grids(X, y, prior, pred, mask, device=DEVICE)
 
             # write to tensorboard
-            summary_writer.add_image("rgb_target_pred_error", grids[0], epoch)
-            summary_writer.add_image("target_parametrization", grids[1], epoch)
+            summary_writer.add_image(
+                f"rgb_target_pred_error/{batch_id}", grids[0], epoch
+            )
+            summary_writer.add_image(
+                f"target_parametrization/{batch_id}", grids[1], epoch
+            )
 
-            # do only one grid to avoid data clutter
-            created_grid = True
-
-        # add loss
-        validation_losses += get_batch_losses(pred, y, loss_functions, device=DEVICE)
+        if batch_id % 100 == 0:
+            print(
+                f"batch {batch_id}/{n_batches}, batch validation losses: {batch_losses}"
+            )
 
     avg_batch_losses = validation_losses / n_batches
     print(f"Average batch validation losses: {avg_batch_losses}")
