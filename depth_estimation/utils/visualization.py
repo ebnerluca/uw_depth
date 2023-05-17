@@ -54,6 +54,33 @@ from torchvision.utils import make_grid
 #     out = cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
 
 #     return out
+def get_bin_centers_img(bin_edges, size, device="cpu"):
+
+    # target shape
+    n_batch = size[0]
+    height = size[2]
+    width = size[3]
+
+    bin_centers_img = torch.zeros(n_batch, 1, 1, width).to(device)
+
+    for i in range(n_batch):
+        # norm bin edges to [0,1]
+        min = bin_edges[i, ...].min()
+        max = bin_edges[i, ...].max()
+        bin_edges_normed = (bin_edges - min) / (max - min)
+
+        n_bins = bin_edges_normed.size(1) - 1
+        black_white = True  # alternating black/white color for good visibility
+        for j in range(n_bins):
+            edge_start = (bin_edges_normed[i, j] * (width - 1)).int().item()
+            edge_end = (bin_edges_normed[i, j + 1] * (width - 1)).int().item()
+            bin_centers_img[i, 0, 0, edge_start:edge_end] = float(black_white)
+            black_white = not black_white
+
+    # extend rows
+    bin_centers_img = bin_centers_img.repeat(1, 1, height, 1)
+
+    return bin_centers_img
 
 
 def gray_to_heatmap(gray, colormap="inferno_r", normalize=True, device="cpu"):
@@ -84,7 +111,7 @@ def gray_to_heatmap(gray, colormap="inferno_r", normalize=True, device="cpu"):
     return heatmaps
 
 
-def get_tensorboard_grids(X, y, prior, pred, mask, device="cpu"):
+def get_tensorboard_grids(X, y, prior, pred, mask, bin_edges, device="cpu"):
     """Generates tensorboard grids for tensorboard summary writer.
 
     Inputs:
@@ -112,6 +139,8 @@ def get_tensorboard_grids(X, y, prior, pred, mask, device="cpu"):
         X, size=[pred.size(2), pred.size(3)], mode="bilinear", align_corners=True
     )
 
+    # get bin center visualization
+    bin_centers_img = get_bin_centers_img(bin_edges, pred.size(), device=device)
     # get heatmaps
     y_heatmap = gray_to_heatmap(y, device=device)
     pred_heatmap = gray_to_heatmap(pred, device=device)
@@ -119,11 +148,17 @@ def get_tensorboard_grids(X, y, prior, pred, mask, device="cpu"):
     dist_heatmap = gray_to_heatmap(dist_map, colormap="inferno", device=device)
     error_heatmap = gray_to_heatmap(error, colormap="inferno", device=device)
     mask_heatmap = gray_to_heatmap(mask.int(), colormap="inferno", device=device)
+    bin_centers_heatmap = gray_to_heatmap(
+        bin_centers_img, colormap="inferno", device=device
+    )
 
     # grids
     nrow = X.size(0)
     rgb_target_pred_error_grid = make_grid(
-        torch.cat((rgb_resized, y_heatmap, pred_heatmap, error_heatmap), dim=0),
+        torch.cat(
+            (rgb_resized, y_heatmap, pred_heatmap, error_heatmap, bin_centers_heatmap),
+            dim=0,
+        ),
         nrow=nrow,
     )
     prior_parametrization_grid = make_grid(
