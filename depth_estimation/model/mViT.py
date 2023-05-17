@@ -39,7 +39,10 @@ class mViT(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(256, 256),
             nn.LeakyReLU(),
-            nn.Linear(256, n_bins),
+            nn.Linear(256, n_bins + 1),
+            # nn.Sigmoid(),  # make sure outputs are [0,1] and no dead neurons
+            # nn.ReLU6(),  # keep signals bounded
+            nn.ReLU(),
         )
         self.n_bins = n_bins
 
@@ -54,22 +57,26 @@ class mViT(nn.Module):
 
         # regression head for adaptive bins, size N x E
         bins_head = out[0, ...]
-        # print(f"bins_head: {bins_head.shape}")
 
         # kernels for attention maps, size N x NK x E
         attention_kernels = out[1 : self.num_query_kernels + 1, ...].permute(1, 0, 2)
-        # print(f"attention_kernel: {attention_kernels.shape}")
 
-        # bin widths
-        bin_widths_normed = self.mlp(bins_head)
-        eps = 0.1  # numerical stability
-        # eps = 1.0 / self.n_bins  # bias: assume all bins equal length
-        bin_widths_normed = torch.relu(bin_widths_normed) + eps  # non negative
-        bin_widths_normed /= bin_widths_normed.sum(dim=1, keepdim=True)  # unit length
-        # print(f"bin_widths_normed: {bin_widths_normed.shape}")
+        # bin widths (deprecated)
+        # bin_widths_normed = self.mlp(bins_head)
+        # eps = 0.1  # numerical stability
+        # bin_widths_normed = torch.relu(bin_widths_normed) + eps  # non negative
+        # bin_widths_normed /= bin_widths_normed.sum(dim=1, keepdim=True)  # unit length
+
+        # estimating max depth and normed bin_widths
+        eps = 0.1
+        mlp_out = self.mlp(bins_head) + eps
+        max_depth = mlp_out[:, 0].unsqueeze(1) * 50.0
+        bin_widths_normed = mlp_out[:, 1:]
+        bin_widths_normed = bin_widths_normed / bin_widths_normed.sum(
+            dim=1, keepdim=True
+        )
 
         # range attention maps, size N x NK x h x w
         range_attention_maps = self.dot_product_layer(x, attention_kernels)
-        # print(f"range_attention_maps: {range_attention_maps.shape}")
 
-        return bin_widths_normed, range_attention_maps
+        return max_depth, bin_widths_normed, range_attention_maps
