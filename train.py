@@ -1,7 +1,6 @@
 import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 
 import time
@@ -9,16 +8,6 @@ import datetime
 import os
 
 from depth_estimation.model.model import UDFNet
-
-# from depth_estimation.utils.data import (
-#     InputTargetDataset,
-#     IntPILToTensor,
-#     FloatPILToTensor,
-#     MutualRandomHorizontalFlip,
-#     MutualRandomVerticalFlip,
-#     RandomFactor,
-#     ReplaceInvalid,
-# )
 from depth_estimation.utils.depth_prior import get_depth_prior_from_ground_truth
 from depth_estimation.utils.loss import (
     CombinedLoss,
@@ -28,14 +17,12 @@ from depth_estimation.utils.loss import (
 )
 from depth_estimation.utils.visualization import get_tensorboard_grids
 
-# from depth_estimation.utils.evaluation import get_batch_losses
 
 from datasets.datasets import get_flsea_dataset, get_usod10k_dataset
 
 ##########################################
 ################# CONFIG #################
 ##########################################
-# torch.autograd.set_detect_anomaly(True)
 
 # training parameters
 BATCH_SIZE = 6
@@ -71,49 +58,8 @@ VALIDATION_LOSS_FUNCTIONS_NAMES = [
 # datasets
 TRAIN_DATASET = get_usod10k_dataset(DEVICE, split="train", train=True)
 VALIDATION_DATASET = get_usod10k_dataset(DEVICE, split="validation", train=False)
-# TRAIN_CSV_FILES = [
-#     # "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/train.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/train.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/train.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/train.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/train.csv",
-#     # "/home/auv/FLSea/archive/canyons/flatiron/flatiron/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/canyons/horse_canyon/horse_canyon/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/canyons/tiny_canyon/tiny_canyon/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/big_dice_loop/big_dice_loop/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/coral_table_loop/coral_table_loop/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/cross_pyramid_loop/cross_pyramid_loop/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/dice_path/dice_path/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/landward_path/landward_path/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/pier_path/pier_path/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/sub_pier/sub_pier/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/canyons/flatiron/flatiron/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/canyons/horse_canyon/horse_canyon/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/canyons/tiny_canyon/tiny_canyon/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/big_dice_loop/big_dice_loop/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/coral_table_loop/coral_table_loop/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/cross_pyramid_loop/cross_pyramid_loop/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/dice_path/dice_path/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/landward_path/landward_path/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/pier_path/pier_path/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/sub_pier/sub_pier/imgs/train_mini.csv",
-#     # "/home/auv/USOD10k/TR/RGB/train.csv",
-#     "/home/auv/USOD10k/TR/RGB/train_mini.csv",
-# ]
-# VALIDATION_CSV_FILES = [
-#     # "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/validation.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221105_053256_lizard_d2_048_resort/i20221105_053256_cv/validation.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221106_032720_lizard_d2_053_corner_beach/i20221106_032720_cv/validation.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221107_233004_lizard_d2_062_washing_machine/i20221107_233004_cv/validation.csv",
-#     # "/media/auv/Seagate_2TB/datasets/r20221109_064451_lizard_d2_077_vickis_v1/i20221109_064451_cv/validation.csv",
-#     # "/home/auv/FLSea/archive/canyons/u_canyon/u_canyon/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/red_sea/northeast_path/northeast_path/imgs/train.csv",
-#     # "/home/auv/FLSea/archive/canyons/u_canyon/u_canyon/imgs/train_mini.csv",
-#     # "/home/auv/FLSea/archive/red_sea/northeast_path/northeast_path/imgs/train_mini.csv",
-#     # "/home/auv/USOD10k/VAL/RGB/validation.csv",
-#     "/home/auv/USOD10k/VAL/RGB/validation_mini.csv",
-# ]
 
+# tensorboard output frequencies
 WRITE_TRAIN_IMG_EVERY_N_BATCHES = 300
 WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
 
@@ -141,46 +87,6 @@ def train_UDFNet():
 
     # initialize model
     model = UDFNet(n_bins=80, normalized_output=True).to(DEVICE)
-
-    # datasets
-    # train_dataset = InputTargetDataset(
-    #     pairs_csv_files=TRAIN_CSV_FILES,
-    #     shuffle=True,
-    #     input_transform=transforms.Compose(
-    #         [
-    #             IntPILToTensor(type="uint8", device=DEVICE),
-    #             transforms.ColorJitter(brightness=0.1, hue=0.05),
-    #         ]
-    #     ),
-    #     target_transform=transforms.Compose(
-    #         [
-    #             # FloatPILToTensor(normalize=False, invalid_value="max", device=DEVICE),
-    #             # RandomFactor(factor_range=(0.5, 1.5)),  # randomly scale depth
-    #             IntPILToTensor(type="uint16", device=DEVICE),  # USOD10k
-    #             # FloatPILToTensor(device=DEVICE),  # FLSEA
-    #             RandomFactor(factor_range=(0.75, 1.25)),  # randomly scale depth
-    #             ReplaceInvalid(value="max", return_mask=True),
-    #         ]
-    #     ),
-    #     both_transform=transforms.Compose(
-    #         [
-    #             MutualRandomHorizontalFlip(),
-    #             # MutualRandomVerticalFlip(),
-    #         ]
-    #     ),
-    # )
-    # validation_dataset = InputTargetDataset(
-    #     pairs_csv_files=VALIDATION_CSV_FILES,
-    #     shuffle=True,
-    #     input_transform=transforms.Compose([Uint8PILToTensor(device=DEVICE)]),
-    #     target_transform=transforms.Compose(
-    #         # [FloatPILToTensor(normalize=False, invalid_value="max", device=DEVICE)]
-    #         [
-    #             FloatPILToTensor(device=DEVICE),
-    #             ReplaceInvalid(value="max", return_mask=True),
-    #         ]
-    #     ),
-    # )
 
     # dataloaders
     train_dataloader = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE)
@@ -215,8 +121,8 @@ def train_UDFNet():
         validation_losses = validate(
             dataloader=validation_dataloader,
             model=model,
-            n_priors_min=200,
-            n_priors_max=200,
+            n_priors_min=N_PRIORS_MIN,
+            n_priors_max=N_PRIORS_MAX,
             loss_functions=VALIDATION_LOSS_FUNCTIONS,
             epoch=epoch,
         )
