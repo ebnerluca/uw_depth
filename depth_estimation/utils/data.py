@@ -157,49 +157,13 @@ class FloatPILToTensor:
     """Converts a float PIL img to a 1xHxW torch tensor"""
 
     def __init__(self, device="cpu"):
-        # self.normalize = normalize
-        # self.invalid_value = invalid_value
+
         self.device = device
 
     def __call__(self, img):
 
         # convert to np array
         img_np = np.array(img)
-
-        # # mask valid values, depth <= 0 means invalid
-        # mask = img_np > 0.0
-        # if not mask.any():
-        #     print(
-        #         "Error, caught empty mask meaning no valid depth values. "
-        #         + "Returning None."
-        #     )
-        #     return None
-
-        # # normalize mask, set invalid to given value
-        # if self.normalize:
-        #     try:
-        #         min = img_np[mask].min()
-        #         max = img_np[mask].max()
-        #         img_np = (img_np - min) / (max - min)
-        #     except ValueError:
-        #         # for very odd frames the whole ground truth is invalid
-        #         # the whole mask is False, leading to empty arrays
-        #         # if this occurs, return None
-        #         print(
-        #             "Error, img has invalid value range: "
-        #             + f"[{img_np.min()}, {img_np.max()}]\n"
-        #             + "Returning None."
-        #         )
-        #         return None
-
-        # change value for invalid pixels
-        # if self.invalid_value is not None:
-        #     if self.invalid_value == "max":
-        #         img_np[~mask] = img_np[mask].max()
-        #     elif self.invalid_value == "min":
-        #         img_np[~mask] = img_np[mask].min()
-        #     else:
-        #         img_np[~mask] = self.invalid_value
 
         # enforce dimension order: channels x height x width
         if img_np.ndim == 2:
@@ -233,7 +197,7 @@ class RandomFactor:
 
 
 class ReplaceInvalid:
-    def __init__(self, value=0.0, return_mask=False) -> None:
+    def __init__(self, value=None, return_mask=False) -> None:
         self.value = value
         self.return_mask = return_mask
 
@@ -263,49 +227,15 @@ class ReplaceInvalid:
         elif self.value == "min":
             min = tensor[mask].min()
             tensor[~mask] = min
-        else:
+        elif self.value is not None:
             tensor[~mask] = self.value
+        else:  # mask is None:
+            pass  # leave invalid values unmodified
 
         if self.return_mask:
             return tensor, mask
         else:
             return tensor
-
-
-# class Normalize:
-#     """Input: 1xHxW depth image
-#     Output: 1xHxW depth image in [0,1]"""
-
-#     def __init__(self, compute_mask=False) -> None:
-#         self.compute_mask = compute_mask
-
-#     def __call__(self, tensor):
-
-#         if tensor is None:
-#             return None
-
-#         if self.compute_mask:
-
-#             # mask all valid pixels (> 0.0)
-#             mask = tensor.gt(0.0)
-
-#             if not mask.any():
-#                 return None
-
-#             # min, max are computed only among valid pixels
-#             min = tensor[mask].min()
-#             max = tensor[mask].max()
-
-#             # normalize valid part to [0,1]
-#             tensor[mask] = (tensor[mask] - min) / (max - min)
-
-#         else:
-#             min = tensor.min()
-#             max = tensor.max()
-
-#             tensor = (tensor - min) / (max - min)
-
-#         return tensor
 
 
 def test_dataset(device="cpu"):
