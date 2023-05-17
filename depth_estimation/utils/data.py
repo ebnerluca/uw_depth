@@ -122,74 +122,190 @@ class MutualRandomVerticalFlip:
         return tensors
 
 
-class Uint8PILToTensor:
+class IntPILToTensor:
     """Converts a uint8 PIL img in range [0,255] to a torch float tensor in range [0,1]."""
+
+    def __init__(self, type="uint8", device="cpu") -> None:
+        self.device = device
+        if type == "uint8":
+            self.divider = 255
+        elif type == "uint16":
+            self.divider = 65535
+        else:
+            self.divider = 1
 
     def __call__(self, img):
         # convert to np array
         img_np = np.array(img)
 
         # enforce dimension order: ch x H x W
-        img_np = img_np.transpose((2, 0, 1))
+        if img_np.ndim == 3:
+            img_np = img_np.transpose((2, 0, 1))
+        elif img_np.ndim == 2:
+            img_np = img_np[np.newaxis, ...]
 
         # convert to tensor
-        img_tensor = torch.from_numpy(img_np)
+        img_tensor = torch.from_numpy(img_np).to(self.device)
 
         # convert to float and divide by 255
-        img_tensor = img_tensor.float().div(255)
+        img_tensor = img_tensor.float().div(self.divider)
 
         return img_tensor
 
 
 class FloatPILToTensor:
-    """Converts a float PIL img to a torch tensor, normalized if specified.
+    """Converts a float PIL img to a 1xHxW torch tensor"""
 
-    Specify zero_add value to add to pixels which would otherwise be exactly zero,
-    this can avoid issues e.g. when using the log() function since log(0) is undefined."""
-
-    def __init__(self, normalize=False, invalid_value=0.0):
-        self.normalize = normalize
-        self.invalid_value = invalid_value
+    def __init__(self, device="cpu"):
+        # self.normalize = normalize
+        # self.invalid_value = invalid_value
+        self.device = device
 
     def __call__(self, img):
 
         # convert to np array
         img_np = np.array(img)
 
-        # mask valid values, depth <= 0 means invalid
-        mask = img_np > 0.0
+        # # mask valid values, depth <= 0 means invalid
+        # mask = img_np > 0.0
+        # if not mask.any():
+        #     print(
+        #         "Error, caught empty mask meaning no valid depth values. "
+        #         + "Returning None."
+        #     )
+        #     return None
 
-        # normalize mask, set invalid to given value
-        if self.normalize:
-            try:
-                min = img_np[mask].min()
-                max = img_np[mask].max()
-                img_np = (img_np - min) / (max - min)
-            except ValueError:
-                # for very odd frames the whole ground truth is invalid
-                # the whole mask is False, leading to empty arrays
-                # if this occurs, return None
-                print(
-                    "Error, img has invalid value range: "
-                    + f"[{img_np.min()}, {img_np.max()}]\n"
-                    + "Returning None."
-                )
-                return None, None
+        # # normalize mask, set invalid to given value
+        # if self.normalize:
+        #     try:
+        #         min = img_np[mask].min()
+        #         max = img_np[mask].max()
+        #         img_np = (img_np - min) / (max - min)
+        #     except ValueError:
+        #         # for very odd frames the whole ground truth is invalid
+        #         # the whole mask is False, leading to empty arrays
+        #         # if this occurs, return None
+        #         print(
+        #             "Error, img has invalid value range: "
+        #             + f"[{img_np.min()}, {img_np.max()}]\n"
+        #             + "Returning None."
+        #         )
+        #         return None
 
         # change value for invalid pixels
-        img_np[~mask] = self.invalid_value
+        # if self.invalid_value is not None:
+        #     if self.invalid_value == "max":
+        #         img_np[~mask] = img_np[mask].max()
+        #     elif self.invalid_value == "min":
+        #         img_np[~mask] = img_np[mask].min()
+        #     else:
+        #         img_np[~mask] = self.invalid_value
 
         # enforce dimension order: channels x height x width
         if img_np.ndim == 2:
             img_np = img_np[np.newaxis, ...]
-        if mask.ndim == 2:
-            mask = mask[np.newaxis, ...]
+        # if mask.ndim == 2:
+        #     mask = mask[np.newaxis, ...]
 
         # convert to tensor
-        img_tensor = torch.from_numpy(img_np)
-        mask = torch.from_numpy(mask)
+        img_tensor = torch.from_numpy(img_np).to(self.device)
+        # mask = torch.from_numpy(mask).to(self.device)
 
-        return img_tensor, mask
+        return img_tensor  # , mask
+
+
+class RandomFactor:
+    def __init__(self, factor_range=(0.75, 1.25)) -> None:
+        self.factor_range = factor_range
+
+    def __call__(self, tensor):
+        if tensor is None:
+            return None
+
+        factor = (
+            torch.rand(1).item() * (self.factor_range[1] - self.factor_range[0])
+            + self.factor_range[0]
+        )
+
+        tensor *= factor
+
+        return tensor
+
+
+class ReplaceInvalid:
+    def __init__(self, value=0.0, return_mask=False) -> None:
+        self.value = value
+        self.return_mask = return_mask
+
+    def __call__(self, tensor):
+
+        if tensor is None:
+            if self.return_mask:
+                return None, None
+            else:
+                return None
+
+        # mask all valid pixels (> 0.0)
+        mask = tensor.gt(0.0)
+
+        # if mask is empty, return None
+        if not mask.any():
+            print("Mask is empty, meaning all depth values invalid. Returning None.")
+            if self.return_mask:
+                return None, None
+            else:
+                return None
+
+        # change value of non valid pixels
+        if self.value == "max":
+            max = tensor[mask].max()
+            tensor[~mask] = max
+        elif self.value == "min":
+            min = tensor[mask].min()
+            tensor[~mask] = min
+        else:
+            tensor[~mask] = self.value
+
+        if self.return_mask:
+            return tensor, mask
+        else:
+            return tensor
+
+
+# class Normalize:
+#     """Input: 1xHxW depth image
+#     Output: 1xHxW depth image in [0,1]"""
+
+#     def __init__(self, compute_mask=False) -> None:
+#         self.compute_mask = compute_mask
+
+#     def __call__(self, tensor):
+
+#         if tensor is None:
+#             return None
+
+#         if self.compute_mask:
+
+#             # mask all valid pixels (> 0.0)
+#             mask = tensor.gt(0.0)
+
+#             if not mask.any():
+#                 return None
+
+#             # min, max are computed only among valid pixels
+#             min = tensor[mask].min()
+#             max = tensor[mask].max()
+
+#             # normalize valid part to [0,1]
+#             tensor[mask] = (tensor[mask] - min) / (max - min)
+
+#         else:
+#             min = tensor.min()
+#             max = tensor.max()
+
+#             tensor = (tensor - min) / (max - min)
+
+#         return tensor
 
 
 def test_dataset(device="cpu"):
@@ -207,8 +323,15 @@ def test_dataset(device="cpu"):
             "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/test.csv",
         ],
         shuffle=True,
-        input_transform=transforms.Compose([Uint8PILToTensor()]),
-        target_transform=transforms.Compose([FloatPILToTensor(normalize=True)]),
+        input_transform=transforms.Compose(
+            [IntPILToTensor(type="uint8", device=device)]
+        ),
+        target_transform=transforms.Compose(
+            [
+                FloatPILToTensor(device=device),
+                ReplaceInvalid(return_mask=True),
+            ]
+        ),
         both_transform=transforms.Compose(
             [
                 MutualRandomHorizontalFlip(),
@@ -218,7 +341,7 @@ def test_dataset(device="cpu"):
     )
 
     # dataloader
-    dataloader = DataLoader(dataset, batch_size=4)
+    dataloader = DataLoader(dataset, batch_size=2)
 
     for batch_id, data in enumerate(dataloader):
 
