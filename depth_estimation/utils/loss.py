@@ -5,7 +5,13 @@ import torch.nn as nn
 class CombinedLoss(nn.Module):
     """Learning objective"""
 
-    def __init__(self, w_silog=1.0, w_l2=1.0, w_masked=1.0) -> None:
+    def __init__(
+        self,
+        w_silog=1.0,
+        w_l2=1.0,
+        w_bins=1.0,
+        w_masked=1.0,
+    ) -> None:
         super(CombinedLoss, self).__init__()
 
         self.name = "CombinedLoss"
@@ -13,13 +19,18 @@ class CombinedLoss(nn.Module):
         # loss components
         self.silog_loss = SILogLoss()
         self.l2_loss = L2Loss()
+        self.bins_chamfer_loss = ChamferDistanceLoss()
 
         # weights
         self.w_silog = w_silog
         self.w_l2 = w_l2
+        self.w_bins = w_bins
         self.w_masked = w_masked
 
-    def forward(self, prediction, target, mask=None):
+    def forward(self, prediction, target, bin_edges, mask=None):
+
+        # TODO: add mask option for chamfer loss
+        bins_chamfer_loss = self.bins_chamfer_loss(target, bin_edges)
 
         # apply mask
         if mask is not None:
@@ -27,7 +38,6 @@ class CombinedLoss(nn.Module):
             masked_target = target[mask]
             invalid_prediction = prediction[~mask]
             invalid_target = target[~mask]
-
         else:
             masked_prediction = prediction
             masked_target = target
@@ -37,7 +47,11 @@ class CombinedLoss(nn.Module):
         l2_loss = self.l2_loss(masked_prediction, masked_target)
 
         # combined loss
-        loss = self.w_l2 * l2_loss + self.w_silog * silog_loss
+        loss = (
+            self.w_l2 * l2_loss
+            + self.w_silog * silog_loss
+            + self.w_bins * bins_chamfer_loss
+        )
 
         # loss in areas of no ground truth
         if (mask is not None) and (self.w_masked < 1.0):
@@ -103,3 +117,44 @@ class L2Loss(nn.Module):
         loss = torch.sqrt(self.mse_loss(prediction, target))
 
         return loss
+
+
+class ChamferDistanceLoss(nn.Module):
+    def __init__(self) -> None:
+        super(ChamferDistanceLoss, self).__init__()
+
+        self.name = "ChamferDistance"
+
+    def forward(self, target, bin_edges):
+        # a, b shape: NxA, NxB
+
+        bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
+        target_depths = target.flatten(1)
+
+        # build distance matrix
+        bidirectional_dist = self.onedirectional_dist(
+            bin_centers, target_depths
+        ) + self.onedirectional_dist(target_depths, bin_centers)
+
+        # mean over all batches
+        bidirectional_dist = bidirectional_dist.mean()
+
+        return bidirectional_dist
+
+    def onedirectional_dist(self, a, b):
+
+        # linear distance matrix, NxAxB
+        distances = a.unsqueeze(-1).repeat(1, 1, b.size(1)) - b.unsqueeze(-1).repeat(
+            1, 1, a.size(1)
+        ).permute(0, 2, 1)
+
+        # squared distance matrix
+        distances_squared = distances.pow(2)
+
+        # find nearest neighbor distance for each point in a, NxA
+        nn_squared_distances = distances_squared.amin(dim=2)
+
+        # summed distance
+        sum = nn_squared_distances.sum(dim=1)
+
+        return sum
