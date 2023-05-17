@@ -44,8 +44,10 @@ def get_signal_maps(dist_map, mu=0.0, std=1.0, device="cpu"):
 
 
 def get_depth_prior_from_ground_truth(
-    targets, n_samples=200, mu=0.0, std=1.0, normalize=True, masks=None, device="cpu"
+    targets, n_samples=200, mu=0.0, std=1.0, masks=None, device="cpu"
 ):
+    # targets, n_samples=200, mu=0.0, std=1.0, normalize=False, masks=None, device="cpu"
+
     """Takes an Nx1xHxW ground truth depth tensor and desired number of samples,
     returns two images per batch represention a prior guess parametrization:
 
@@ -120,12 +122,12 @@ def get_depth_prior_from_ground_truth(
         # normalize and invert prior map (close points should have strong signals)
         # signal_strength_map = 1.0 - (dist_map_min / dist_map_min.max())
 
-        # normalize the depth prior values to [0,1]
-        if normalize:
-            eps = 1e-10  # avoid zero division if max == min (e.g. only one sample)
-            min = prior_map.min()
-            max = prior_map.max()
-            prior_map = (prior_map - min) / (max - min + eps)
+        # # normalize the depth prior values to [0,1]
+        # if normalize:
+        #     eps = 1e-10  # avoid zero division if max == min (e.g. only one sample)
+        #     min = prior_map.min()
+        #     max = prior_map.max()
+        #     prior_map = (prior_map - min) / (max - min + eps)
 
         # concat
         prior_maps[i, ...] = prior_map
@@ -138,6 +140,7 @@ def get_depth_prior_from_ground_truth(
     # convert pixel distance to signal strength
     signal_strength_maps = get_signal_maps(distance_maps, mu=mu, std=std, device=device)
 
+    # parametrization
     parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW
 
     return parametrization, features
