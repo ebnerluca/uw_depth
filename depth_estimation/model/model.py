@@ -30,7 +30,7 @@ class SimpleEncoderDecoder(nn.Module):
 class UDFNet(nn.Module):
     """Underwater Depth Fusion Net"""
 
-    def __init__(self, n_bins=128, normalized_output=False) -> None:
+    def __init__(self, n_bins=128, max_depth=None) -> None:
         super(UDFNet, self).__init__()
 
         # encoder based on MobileNetV2
@@ -60,7 +60,7 @@ class UDFNet(nn.Module):
 
         # params
         self.n_bins = n_bins
-        self.normalized_output = normalized_output
+        self.max_depth = max_depth
 
     def forward(self, rgb, prior_parametrization):
         """Input:
@@ -78,7 +78,7 @@ class UDFNet(nn.Module):
         mvit_in = torch.cat((decoder_out, prior_parametrization), dim=1)
 
         # normed bin widths, range attention maps
-        max_depth, bin_widths_normed, range_attention_maps = self.mViT(mvit_in)
+        pred_max_depth, bin_widths_normed, range_attention_maps = self.mViT(mvit_in)
 
         # bin edges
         bin_edges_normed = torch.cumsum(bin_widths_normed, dim=1)
@@ -87,10 +87,10 @@ class UDFNet(nn.Module):
         )  # add edge at zero
 
         # scale bin edges
-        if self.normalized_output:
-            bin_edges = bin_edges_normed
+        if self.max_depth is None:
+            bin_edges = bin_edges_normed * pred_max_depth
         else:
-            bin_edges = bin_edges_normed * max_depth
+            bin_edges = bin_edges * self.max_depth
 
         # bin centers
         bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
