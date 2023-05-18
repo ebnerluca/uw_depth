@@ -120,10 +120,15 @@ class L2Loss(nn.Module):
 
 
 class ChamferDistanceLoss(nn.Module):
-    def __init__(self) -> None:
+    """Chamfer Distance Loss.
+    Target images and bin centers are normalized by deviding by corresponding max."""
+
+    def __init__(self, scale_invariant=True) -> None:
         super(ChamferDistanceLoss, self).__init__()
 
         self.name = "ChamferDistance"
+
+        self.scale_invariant = scale_invariant
 
     def onedirectional_dist(self, a, b):
 
@@ -135,8 +140,14 @@ class ChamferDistanceLoss(nn.Module):
         # squared distance matrix
         distances_squared = distances.pow(2)
 
+        # replace non finite values (corresponding to invalid pixels) with inf
+        distances_squared[~distances_squared.isfinite()] = torch.inf
+
         # find nearest neighbor distance for each point in a, NxA
         nn_squared_distances = distances_squared.amin(dim=2)
+
+        # replace inf values (corresponding to invalid pixels) to zero
+        nn_squared_distances[~nn_squared_distances.isfinite()] = 0.0
 
         # summed distance
         sum = nn_squared_distances.sum(dim=1)
@@ -147,6 +158,21 @@ class ChamferDistanceLoss(nn.Module):
         # target shape: Nx1xHxW
         # bin_centers shape: NxB
 
+        # normalize, global scale should have no effect
+        if self.scale_invariant:
+            if mask is not None:
+                target_max = torch.tensor(
+                    [img[m].max() for img, m in zip(target, mask)]
+                ).to(target.device)
+            else:
+                target_max = target.amax(dim=(2, 3))
+            bin_centers_max = bin_centers.amax(dim=1)
+            target_n = target / target_max
+            bin_centers_n = bin_centers / bin_centers_max
+        else:
+            target_n = target.clone()
+            bin_centers_n = bin_centers.clone()
+
         # apply mask
         # if there is a mask, number of valid target pixels is different
         # for every batch. However, for vectorized computation we want to
@@ -154,30 +180,49 @@ class ChamferDistanceLoss(nn.Module):
         # to some value that is out of range such that no valid pixel value will
         # choose this value as its nearest neighbor
         if mask is not None:
-            eps = 1.0
-            max_target = target[mask].max()
-            max_center = bin_centers.max()
-            max = torch.maximum(max_target, max_center)
-            min = torch.minimum(max_target, max_center)
-            pad_value = max + (max - min) + eps
+            pad_value = torch.inf
             pad = (0, 1)  # pad nothing in front, pad one value at end
-            modified_bin_centers = nn.functional.pad(bin_centers, pad, value=pad_value)
-            modified_target = target.clone()  # dont change real target, thus clone
-            modified_target[~mask] = pad_value
-
-        else:
-            modified_target = target
-            modified_bin_centers = bin_centers
+            bin_centers_n = nn.functional.pad(bin_centers_n, pad, value=pad_value)
+            target_n[~mask] = pad_value
 
         # target depths vectors, Nx(HW)
-        target_depths = modified_target.flatten(1)
+        target_depths = target_n.flatten(1)
 
         # build distance matrix
         bidirectional_dist = self.onedirectional_dist(
-            modified_bin_centers, target_depths
-        ) + self.onedirectional_dist(target_depths, modified_bin_centers)
+            bin_centers_n, target_depths
+        ) + self.onedirectional_dist(target_depths, bin_centers_n)
 
         # mean over all batches
         bidirectional_dist = bidirectional_dist.mean()
 
         return bidirectional_dist
+
+
+def test_chamfer():
+
+    # bins
+    n_bins = 200
+    bin_edges = torch.arange(0.0, n_bins, 1.0)
+    bin_edges = bin_edges.unsqueeze(0).repeat(1, 1)
+    bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
+
+    # random image
+    img = torch.rand(1, 1, 240, 320)
+
+    # mask
+    mask = img.lt(0.7)
+
+    # change invalid part of img to 1.0
+    img[~mask] = 1.0
+
+    # loss
+    lossfunc = ChamferDistanceLoss()
+    loss = lossfunc(img, bin_centers)
+    loss_masked = lossfunc(img, bin_centers, mask)
+    print(f"img chamfer loss: {loss}")
+    print(f"img chamfer loss with mask: {loss_masked}")
+
+
+if __name__ == "__main__":
+    test_chamfer()
