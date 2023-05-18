@@ -29,8 +29,8 @@ class CombinedLoss(nn.Module):
 
     def forward(self, prediction, target, bin_edges, mask=None):
 
-        # TODO: add mask option for chamfer loss
-        bins_chamfer_loss = self.bins_chamfer_loss(target, bin_edges)
+        # TODO: make chamfer loss scale invariant
+        bins_chamfer_loss = self.bins_chamfer_loss(target, bin_edges, mask)
 
         # apply mask
         if mask is not None:
@@ -125,22 +125,6 @@ class ChamferDistanceLoss(nn.Module):
 
         self.name = "ChamferDistance"
 
-    def forward(self, target, bin_edges):
-        # a, b shape: NxA, NxB
-
-        bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
-        target_depths = target.flatten(1)
-
-        # build distance matrix
-        bidirectional_dist = self.onedirectional_dist(
-            bin_centers, target_depths
-        ) + self.onedirectional_dist(target_depths, bin_centers)
-
-        # mean over all batches
-        bidirectional_dist = bidirectional_dist.mean()
-
-        return bidirectional_dist
-
     def onedirectional_dist(self, a, b):
 
         # linear distance matrix, NxAxB
@@ -158,3 +142,42 @@ class ChamferDistanceLoss(nn.Module):
         sum = nn_squared_distances.sum(dim=1)
 
         return sum
+
+    def forward(self, target, bin_centers, mask=None):
+        # target shape: Nx1xHxW
+        # bin_centers shape: NxB
+
+        # apply mask
+        # if there is a mask, number of valid target pixels is different
+        # for every batch. However, for vectorized computation we want to
+        # keep the dimension and just change the unmasked values of the target
+        # to some value that is out of range such that no valid pixel value will
+        # choose this value as its nearest neighbor
+        if mask is not None:
+            eps = 1.0
+            max_target = target[mask].max()
+            max_center = bin_centers.max()
+            max = torch.maximum(max_target, max_center)
+            min = torch.minimum(max_target, max_center)
+            pad_value = max + (max - min) + eps
+            pad = (0, 1)  # pad nothing in front, pad one value at end
+            modified_bin_centers = nn.functional.pad(bin_centers, pad, value=pad_value)
+            modified_target = target.clone()  # dont change real target, thus clone
+            modified_target[~mask] = pad_value
+
+        else:
+            modified_target = target
+            modified_bin_centers = bin_centers
+
+        # target depths vectors, Nx(HW)
+        target_depths = modified_target.flatten(1)
+
+        # build distance matrix
+        bidirectional_dist = self.onedirectional_dist(
+            modified_bin_centers, target_depths
+        ) + self.onedirectional_dist(target_depths, modified_bin_centers)
+
+        # mean over all batches
+        bidirectional_dist = bidirectional_dist.mean()
+
+        return bidirectional_dist
