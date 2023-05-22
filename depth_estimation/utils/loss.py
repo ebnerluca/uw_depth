@@ -29,7 +29,7 @@ class CombinedLoss(nn.Module):
 
     def forward(self, prediction, target, bin_edges, mask=None):
 
-        # TODO: make chamfer loss scale invariant
+        # chamfer loss
         bins_chamfer_loss = self.bins_chamfer_loss(target, bin_edges, mask)
 
         # apply mask
@@ -132,25 +132,27 @@ class ChamferDistanceLoss(nn.Module):
 
     def onedirectional_dist(self, a, b):
 
-        # linear distance matrix, NxAxB
-        distances = a.unsqueeze(-1).repeat(1, 1, b.size(1)) - b.unsqueeze(-1).repeat(
-            1, 1, a.size(1)
-        ).permute(0, 2, 1)
+        # manually assign memory and use expand instead of repeat to minimize memory usage
+        distances = torch.empty(a.size(0), a.size(1), b.size(1))  # 1xAxB
+        distances[...] = a.unsqueeze(-1).expand(
+            a.size(0), a.size(1), b.size(1)
+        ) - b.unsqueeze(-1).expand(b.size(0), b.size(1), a.size(1)).permute(0, 2, 1)
 
         # squared distance matrix
-        distances_squared = distances.pow(2)
-
-        # replace non finite values (corresponding to invalid pixels) with inf
-        distances_squared[~distances_squared.isfinite()] = torch.inf
+        distances = distances.pow(2)
 
         # find nearest neighbor distance for each point in a, NxA
-        nn_squared_distances = distances_squared.amin(dim=2)
-
-        # replace inf values (corresponding to invalid pixels) to zero
-        nn_squared_distances[~nn_squared_distances.isfinite()] = 0.0
+        nn_squared_distances = distances.amin(dim=2)
 
         # summed distance
-        sum = nn_squared_distances.sum(dim=1)
+        sum = nn_squared_distances.sum()
+
+        # per point average
+        sum /= a.size(1)
+
+        # print(f"sum: {sum}")
+        # print(f"avg: {nn_squared_distances.mean()}")
+        # print(f"sum == avg: {sum==nn_squared_distances.mean()}")
 
         return sum
 
@@ -160,68 +162,110 @@ class ChamferDistanceLoss(nn.Module):
 
         # normalize, global scale should have no effect
         if self.scale_invariant:
+
+            # find target max
             if mask is not None:
                 target_max = torch.tensor(
                     [img[m].max() for img, m in zip(target, mask)]
-                ).to(target.device)
+                ).to(target.device)[..., None, None, None]
             else:
-                target_max = target.amax(dim=(2, 3))
-            bin_centers_max = bin_centers.amax(dim=1)
-            target_n = target / target_max
-            bin_centers_n = bin_centers / bin_centers_max
+                target_max = target.amax(dim=(2, 3))[..., None, None]
+
+            # norm target and bins by target max
+            target_n = target / target_max  # [..., None, None, None]
+            print(f"bin_centers shape: {bin_centers.shape}")
+            print(f"target_max shape: {target_max[..., 0, 0].shape}")
+            bin_centers_n = bin_centers / target_max[..., 0, 0]
         else:
             target_n = target.clone()
             bin_centers_n = bin_centers.clone()
 
-        # apply mask
-        # if there is a mask, number of valid target pixels is different
-        # for every batch. However, for vectorized computation we want to
-        # keep the dimension and just change the unmasked values of the target
-        # to some value that is out of range such that no valid pixel value will
-        # choose this value as its nearest neighbor
-        if mask is not None:
-            pad_value = torch.inf
-            pad = (0, 1)  # pad nothing in front, pad one value at end
-            bin_centers_n = nn.functional.pad(bin_centers_n, pad, value=pad_value)
-            target_n[~mask] = pad_value
+        # doing imgs sequential takes slightly longer but drastically lowers memory usage
+        n_batch = target.size(0)
+        bidirectional_dist = torch.zeros(1).to(target.device)
+        for i in range(n_batch):
 
-        # target depths vectors, Nx(HW)
-        target_depths = target_n.flatten(1)
+            # apply mask if any
+            if mask is not None:
+                target_depths = target_n[i, mask[i, ...]].flatten().unsqueeze(0)
+            else:
+                target_depths = target_n[i, ...].flatten().unsqueeze(0)
 
-        # build distance matrix
-        bidirectional_dist = self.onedirectional_dist(
-            bin_centers_n, target_depths
-        ) + self.onedirectional_dist(target_depths, bin_centers_n)
+            bidirectional_dist += self.onedirectional_dist(
+                bin_centers_n[i].unsqueeze(0), target_depths
+            ) + self.onedirectional_dist(target_depths, bin_centers_n[i].unsqueeze(0))
 
         # mean over all batches
-        bidirectional_dist = bidirectional_dist.mean()
+        bidirectional_dist = bidirectional_dist / n_batch
 
         return bidirectional_dist
 
 
+def get_target_bins(target, n_bins=100):
+    """UNTESTED: Reduce an image by sorting all pixel values first and using only its n_bins quantiles.
+    This allows for much faster computation of e.g. the ChamferDistanceLoss, but also  loss of information.
+    Returns a sorted reduced target in format Nx1xn_binsx1"""
+
+    # # bins
+    # edges = torch.arange(n_bins + 1) / n_bins
+    # bin_centers = 0.5 * (edges[:-1] + edges[1:])
+    # bin_centers = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
+
+    # sort target
+    target_sorted, _ = target.flatten(1).sort()
+
+    # find indices for reduced img
+    step = target_sorted.size(1) / n_bins
+    edges = torch.arange(n_bins + 1)  # [0, 1, ..., n]
+    bin_center_indices = 0.5 * (edges[:-1] + edges[1:]) * step
+    # bin_center_indices = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
+
+    # reduced target
+    target_bins = target_sorted[:, bin_center_indices.long()]
+    target_bins = target_bins.unsqueeze(1).unsqueeze(-1)  # channel and width dim
+
+    return target_bins
+
+
 def test_chamfer():
 
+    # batch size
+    n_batch = 4
+
     # bins
-    n_bins = 200
-    bin_edges = torch.arange(0.0, n_bins, 1.0)
-    bin_edges = bin_edges.unsqueeze(0).repeat(1, 1)
+    n_bins = 80
+    bin_edges = torch.arange(0.0, 1.0, 1.0 / n_bins)
+    bin_edges = bin_edges.unsqueeze(0).repeat(n_batch, 1)
     bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
+    print(f"bin center shape: {bin_centers.shape}")
 
     # random image
-    img = torch.rand(1, 1, 240, 320)
-
-    # mask
-    mask = img.lt(0.7)
-
-    # change invalid part of img to 1.0
-    img[~mask] = 1.0
+    img = torch.rand(n_batch, 1, 240, 320)
 
     # loss
-    lossfunc = ChamferDistanceLoss()
-    loss = lossfunc(img, bin_centers)
-    loss_masked = lossfunc(img, bin_centers, mask)
-    print(f"img chamfer loss: {loss}")
-    print(f"img chamfer loss with mask: {loss_masked}")
+    lossfunc = ChamferDistanceLoss(scale_invariant=True)
+
+    print("Testing scale invariance ...")
+    scale = 2.0
+    assert lossfunc(img, bin_centers) == lossfunc(scale * img, scale * bin_centers)
+
+    print(f"img [0,1], bins [0,1], loss: {lossfunc(img, bin_centers)}")
+
+    # mask
+    mask = img.lt(0.8)
+    # change invalid part of img to 1.0
+    img[~mask] = img[mask].max()
+
+    print("Testing scale invariance with mask...")
+    scale = 2.0
+    assert lossfunc(img, bin_centers, mask) == lossfunc(
+        scale * img, scale * bin_centers, mask
+    )
+
+    print("Test masking option ...")
+    assert lossfunc(img, bin_centers) > lossfunc(img, bin_centers, mask)
+
+    print("Tests succeeded.")
 
 
 if __name__ == "__main__":
