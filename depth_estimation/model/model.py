@@ -90,7 +90,7 @@ class UDFNet(nn.Module):
         if self.max_depth is None:
             bin_edges = bin_edges_normed * pred_max_depth
         else:
-            bin_edges = bin_edges * self.max_depth
+            bin_edges = bin_edges_normed * self.max_depth
 
         # bin centers
         bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])

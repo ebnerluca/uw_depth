@@ -221,16 +221,15 @@ class ReplaceInvalid:
                 return None
 
         # change value of non valid pixels
-        if self.value == "max":
-            max = tensor[mask].max()
-            tensor[~mask] = max
-        elif self.value == "min":
-            min = tensor[mask].min()
-            tensor[~mask] = min
-        elif self.value is not None:
-            tensor[~mask] = self.value
-        else:  # mask is None:
-            pass  # leave invalid values unmodified
+        if self.value is not None:
+            if self.value == "max":
+                max = tensor[mask].max()
+                tensor[~mask] = max
+            elif self.value == "min":
+                min = tensor[mask].min()
+                tensor[~mask] = min
+            else:
+                tensor[~mask] = self.value
 
         if self.return_mask:
             return tensor, mask

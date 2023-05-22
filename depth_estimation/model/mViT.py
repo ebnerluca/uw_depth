@@ -40,9 +40,8 @@ class mViT(nn.Module):
             nn.Linear(256, 256),
             nn.LeakyReLU(),
             nn.Linear(256, n_bins + 1),
-            # nn.Sigmoid(),  # make sure outputs are [0,1] and no dead neurons
-            # nn.ReLU6(),  # keep signals bounded
-            nn.ReLU(),
+            # nn.ReLU(),
+            nn.Softplus(),  # replace ReLU because it causes dead neurons
         )
         self.n_bins = n_bins
 
@@ -70,7 +69,7 @@ class mViT(nn.Module):
         # estimating max depth and normed bin_widths
         eps = 0.1
         mlp_out = self.mlp(bins_head) + eps
-        max_depth = mlp_out[:, 0].unsqueeze(1) * 50.0
+        max_depth = mlp_out[:, 0].unsqueeze(1)
         bin_widths_normed = mlp_out[:, 1:]
         bin_widths_normed = bin_widths_normed / bin_widths_normed.sum(
             dim=1, keepdim=True
