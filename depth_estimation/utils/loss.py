@@ -173,8 +173,6 @@ class ChamferDistanceLoss(nn.Module):
 
             # norm target and bins by target max
             target_n = target / target_max  # [..., None, None, None]
-            print(f"bin_centers shape: {bin_centers.shape}")
-            print(f"target_max shape: {target_max[..., 0, 0].shape}")
             bin_centers_n = bin_centers / target_max[..., 0, 0]
         else:
             target_n = target.clone()
@@ -198,7 +196,7 @@ class ChamferDistanceLoss(nn.Module):
         # mean over all batches
         bidirectional_dist = bidirectional_dist / n_batch
 
-        return bidirectional_dist
+        return bidirectional_dist * 10.0
 
 
 def get_target_bins(target, n_bins=100):

@@ -79,7 +79,7 @@ def get_depth_prior_from_ground_truth(
     pixel_idcs = torch.arange(n_pixels).to(device)
 
     # for each image
-    for i in range(targets.size(0)):
+    for i in range(batch_size):
 
         # identify valid pixels
         if masks is not None:
@@ -147,9 +147,7 @@ def get_depth_prior_from_ground_truth(
 
 
 def get_depth_prior_from_features(
-    idcs_height,
-    idcs_widht,
-    values,
+    features,
     height=240,
     width=320,
     mu=0.0,
@@ -159,7 +157,62 @@ def get_depth_prior_from_features(
     """Takes lists of pixel indeces and their respective depth probes and
     returns a depth prior parametrization."""
 
-    pass
+    batch_size = features.size(0)
+
+    # depth prior maps
+    prior_maps = torch.empty(batch_size, 1, height, width).to(device)
+
+    # euclidean distance maps
+    distance_maps = torch.empty(batch_size, 1, height, width).to(device)
+
+    # for every img, cannot vectorize because of masks with unequal length
+    # (different images may have different number of features)
+    for i in range(batch_size):
+
+        # use only entries with valid depth
+        mask = features[i, :, 2] > 0.0
+
+        if not mask.any():
+            print(
+                "WARNING: Img has no features, using zeros placeholder as parametrization!"
+            )
+            prior_maps[i, ...] = 0.0
+            distance_maps[i, ...] = 1e10
+            continue
+
+        # get list of indices and depth values
+        idcs_height = features[i, mask, 0].round().long()
+        idcs_width = features[i, mask, 1].round().long()
+        depth_values = features[i, mask, 2]
+
+        # get n_samples x height x width dist maps
+        sample_dist_maps = get_distance_maps(
+            height, width, idcs_height, idcs_width, device=device
+        )
+        # try:
+        # find min and argmin
+        dist_map_min, dist_argmin = torch.min(sample_dist_maps, dim=0, keepdim=True)
+        # except IndexError:
+        #     print(f"idcs_height: {idcs_height}")
+        #     print(f"idcs_width: {idcs_width}")
+        #     print(f"depth_values: {depth_values}")
+        #     print(f"features[i]: {features[i]}")
+
+        # nearest neighbor prior map
+        prior_map = depth_values[dist_argmin]  # 1xHxW
+
+        # concat
+        prior_maps[i, ...] = prior_map
+        distance_maps[i, ...] = dist_map_min
+
+    # probability model:
+    # convert pixel distance to signal strength
+    signal_strength_maps = get_signal_maps(distance_maps, mu=mu, std=std, device=device)
+
+    # parametrization
+    parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW
+
+    return parametrization
 
 
 def test_get_priors(device="cpu"):
@@ -188,7 +241,6 @@ def test_get_priors(device="cpu"):
         n_samples=100,
         mu=0.0,
         std=10.0,
-        normalize=True,
         masks=masks,
         device=device,
     )
@@ -223,5 +275,76 @@ def test_get_priors(device="cpu"):
     print("Testing depth prior parametrization done.")
 
 
+def test_get_priors_from_features(device="cpu"):
+
+    # import modules only needed for testing
+    import matplotlib.pyplot as plt
+    import time
+
+    print("Testing depth prior parametrization from given features ...")
+
+    n_features = 200
+    height = 240
+    width = 320
+
+    # generate target ground truth maps to generate prior from
+    # in this case, simple gradient images are used
+    target1 = torch.linspace(0, 0.5, width).repeat(height, 1) + torch.linspace(
+        0, 0.5, height
+    ).repeat(width, 1).transpose(0, 1)
+    target1 = target1[None, None, ...]  # add batch and channel dimension
+    target2 = 1.0 - target1
+    targets = torch.cat((target1, target1, target2, target2), dim=0).to(device)
+
+    # create some features that should be used for parametrization
+    batch_size = targets.size(0)
+    features = torch.empty(batch_size, 200, 3)
+    for i in range(batch_size):
+
+        # get random locations for fdepth samples
+        idcs_height = torch.randperm(height)[:n_features].unsqueeze(1)
+        idcs_width = torch.randperm(width)[:n_features].unsqueeze(1)
+
+        # get the depth values at those locations
+        depth_values = targets[i, 0, idcs_height, idcs_width]
+
+        print(f"shape idcs height: {idcs_height.shape}")
+        print(f"shape depth_values: {depth_values.shape}")
+
+        # concat idcs and values to generate feature tensor
+        img_features = torch.cat([idcs_height, idcs_width, depth_values], dim=1)
+
+        # fill in
+        features[i, ...] = img_features
+
+    # get parametrization
+    prior = get_depth_prior_from_features(
+        features, height=height, width=width, mu=0.0, std=10.0, device=device
+    )
+    prior_maps = prior[:, 0, ...].unsqueeze(1)
+    signal_maps = prior[:, 1, ...].unsqueeze(1)
+
+    # plot
+    for i in range(targets.size(0)):
+
+        target = targets[i, ...]
+        prior_map = prior_maps[i, ...]
+        signal_map = signal_maps[i, ...]
+        plt.figure(f"target {i}")
+        plt.imshow(target.permute(1, 2, 0))
+        plt.figure(f"prior map {i}")
+        plt.imshow(prior_map.permute(1, 2, 0))
+        plt.figure(f"dist map {i}")
+        plt.imshow(signal_map.permute(1, 2, 0))
+
+        print(f"prior map {i} range: [{prior_map.min()}, {prior_map.max()}]")
+        print(f"signal map {i} range: [{signal_map.min()}, {signal_map.max()}]")
+
+    plt.show()
+
+    print("Testing depth prior parametrization from given features done.")
+
+
 if __name__ == "__main__":
-    test_get_priors()
+    # test_get_priors()
+    test_get_priors_from_features()

@@ -6,6 +6,7 @@ import numpy as np
 
 from PIL import Image
 import csv
+import pandas as pd
 
 import random
 from os.path import exists
@@ -13,18 +14,24 @@ from os.path import exists
 
 class InputTargetDataset:
     """Parameters:
-    - pairs_csv_files: List of filepaths to csv files which list image pairs (input and target)
+    - path_tuples_csv_files: List of filepaths to csv files which list image tuples (input, target (,features))
     - input_transform: Transform to apply to the input RGB image, needs to return torch Tensor
     - target_transform: Transform to apply to the target depth image, needs to return torch Tensor and corresponding mask
-    - both_transform: Transform to apply to both input and target image, needs to return torch Tensor"""
+    - both_transform: Transform to apply to both input and target image, needs to return torch Tensor
+    - use_csv_samples: Bool to specify if depth samples should be drawn randomly or from saved csv file
+    - samples_flip_hooks: Transform tuple hooks needed so samples can be flipped mutually with the rgb and depth img
+    - max_samples: max number of samples per image"""
 
     def __init__(
         self,
-        pairs_csv_files,
+        path_tuples_csv_files,
         input_transform,
         target_transform,
         shuffle=False,
         both_transform=None,
+        use_csv_samples=False,
+        samples_flip_hooks=(None, None),  # horizontal, vertical flip
+        max_samples=200,
     ) -> None:
 
         # transforms applied to input and target
@@ -32,27 +39,39 @@ class InputTargetDataset:
         self.target_transform = target_transform
         self.both_transform = both_transform
 
-        # load pairs
-        self.pairs = []
-        for csv_file in pairs_csv_files:
-            self.pairs += [i for i in csv.reader(open(csv_file).read().splitlines())]
+        # load tuples
+        self.path_tuples = []
+        for csv_file in path_tuples_csv_files:
+            try:
+                lines = csv.reader(open(csv_file).read().splitlines())
+                self.path_tuples += [i for i in lines]
+            except FileNotFoundError:
+                print(f"{csv_file} not found, skipping...")
 
-        # random shuffle pairs
+        # random shuffle tuples
         if shuffle:
-            random.shuffle(self.pairs)
+            random.shuffle(self.path_tuples)
+
+        # depth_samples
+        self.use_csv_samples = use_csv_samples
+        self.samples_flip_hooks = samples_flip_hooks
+        self.max_samples = max_samples
 
         # checking dataset for missing files
         if not self.check_dataset():
-            print("WARNING, corrupted dataset (missing files)")
+            print("ERROR, corrupted dataset (missing files). Triggering exit(1).")
+            exit(1)
+
+        print(f"Dataset with {len(self)} pairs.")
 
     def __len__(self):
-        return len(self.pairs)
+        return len(self.path_tuples)
 
     def __getitem__(self, idx):
 
         # get filenames
-        input_fn = self.pairs[idx][0]
-        target_fn = self.pairs[idx][1]
+        input_fn = self.path_tuples[idx][0]
+        target_fn = self.path_tuples[idx][1]
 
         # read imgs
         input_img = Image.open(input_fn).resize((640, 480))
@@ -63,26 +82,75 @@ class InputTargetDataset:
         target_img, mask = self.target_transform(target_img)
 
         if (input_img is None) or (target_img is None) or (mask is None):
-            print(f"Loading img pair failed, received None. paths:")
+            print(f"Loading img tuple failed, received None. paths:")
             print(input_fn)
             print(target_fn)
             print("Trying other image as substitution ...")
             random_idx = np.random.randint(0, len(self))
-            input_img, target_img, mask = self[random_idx]
+            return self[random_idx]  # recursion
 
         if self.both_transform is not None:
             input_img, target_img, mask = self.both_transform(
                 [input_img, target_img, mask]
             )
 
+        # read precomputed depth samples from csv
+        if self.use_csv_samples:
+
+            depth_samples_csv_file = self.path_tuples[idx][2]
+
+            # need same dimensions for minibatch stacking, so we fix it
+            depth_samples = np.zeros((self.max_samples, 3), dtype=np.float32)
+
+            # load actual samples (might be less than n_samples)
+            depth_samples_data = pd.read_csv(depth_samples_csv_file).to_numpy()[
+                : self.max_samples
+            ]
+
+            # give warning when no features
+            if len(depth_samples_data) == 0:
+                print(
+                    f"WARNING: Features list {self.path_tuples[idx][2]} is empty, placeholder parametrization will be used!"
+                )
+
+            # fill in data where available
+            depth_samples[: len(depth_samples_data)] = depth_samples_data
+
+            # tensor from numpy
+            depth_samples = torch.from_numpy(depth_samples).to(input_img.device)
+
+            # perform same flips as input and target for depth samples
+            for hook in self.samples_flip_hooks:
+                if hook is not None:
+                    depth_samples = hook(
+                        [depth_samples],
+                        flip_same_as_last=True,
+                        index_tensor_hw=(240, 320),
+                    )[0]
+
+            return input_img, target_img, mask, depth_samples
+
         return input_img, target_img, mask
 
     def check_dataset(self):
         """Checks dataset for missing files."""
-        for pair in self.pairs:
-            if (not exists(pair[0])) or (not exists(pair[1])):
-                print(f"Missing files! {pair} is missing.")
+        for tuple in self.path_tuples:
+            if (not exists(tuple[0])) or (not exists(tuple[1])):
+                print(f"Missing files! {tuple} is missing.")
                 return False
+
+            # check depth samples
+            if self.use_csv_samples:
+                try:
+                    if not exists(tuple[2]):
+                        print(f"Missing files! {tuple} is missing.")
+                        return False
+                except IndexError:
+                    print(
+                        f"Specified use_csv_samples, but path_tuples csv file doesnt list any! tuple: {tuple}"
+                    )
+                    return False
+
         return True
 
 
@@ -92,14 +160,29 @@ class MutualRandomHorizontalFlip:
 
     def __init__(self, p=0.5) -> None:
         self.p = p
+        self.flipped_last = False
 
-    def __call__(self, tensors):
+    def __call__(self, tensors, flip_same_as_last=False, index_tensor_hw=(None, None)):
 
-        do_flip = torch.rand(1) < self.p  # do flip or not
+        # do flip or not
+        if flip_same_as_last:
+            do_flip = self.flipped_last
+        else:
+            do_flip = torch.rand(1) < self.p
 
+        # flip
         if do_flip:
+            # iterate through list of tensors (usually [rgb, depth] or [depth_samples])
             for i in range(len(tensors)):
-                tensors[i] = hflip(tensors[i])
+
+                # check if tensor is image or list of depth samples
+                if tensors[i].size(-1) == 3:  # tensor is list of depth samples
+                    tensors[i][:, 1] = index_tensor_hw[1] - 1.0 - tensors[i][..., 1]
+                else:  # tensor is img
+                    tensors[i] = hflip(tensors[i])
+
+        # save state so features can be flipped accordingly
+        self.flipped_last = do_flip
 
         return tensors
 
@@ -110,14 +193,29 @@ class MutualRandomVerticalFlip:
 
     def __init__(self, p=0.5) -> None:
         self.p = p
+        self.flipped_last = False
 
-    def __call__(self, tensors):
+    def __call__(self, tensors, flip_same_as_last=False, index_tensor_hw=(None, None)):
 
-        do_flip = torch.rand(1) < self.p  # do flip or not
+        # do flip or not
+        if flip_same_as_last:
+            do_flip = self.flipped_last
+        else:
+            do_flip = torch.rand(1) < self.p
 
+        # flip
         if do_flip:
+            # iterate through list of tensors (usually [rgb, depth] or [depth_samples])
             for i in range(len(tensors)):
-                tensors[i] = vflip(tensors[i])
+
+                # check if tensor is image or list of depth samples
+                if tensors[i].size(-1) == 3:  # tensor is list of depth samples
+                    tensors[i][:, 0] = index_tensor_hw[0] - 1.0 - tensors[i][..., 0]
+                else:  # tensor is img
+                    tensors[i] = vflip(tensors[i])
+
+        # save state so features can be flipped accordingly
+        self.flipped_last = do_flip
 
         return tensors
 
@@ -246,10 +344,14 @@ def test_dataset(device="cpu"):
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
 
+    # define flip transforms (needed for hook usage later, check "sample_flip_hooks"
+    mutual_horizontal_flip = MutualRandomHorizontalFlip()
+    mutual_vertical_flip = MutualRandomVerticalFlip()
+
     # define dataset
     dataset = InputTargetDataset(
-        pairs_csv_files=[
-            "/media/auv/Seagate_2TB/datasets/r20221104_224412_lizard_d2_044_lagoon_01/i20221104_224412_cv/test.csv",
+        path_tuples_csv_files=[
+            "/home/auv/FLSea/archive/canyons/flatiron/flatiron/imgs/dataset_with_features.csv",
         ],
         shuffle=True,
         input_transform=transforms.Compose(
@@ -263,10 +365,12 @@ def test_dataset(device="cpu"):
         ),
         both_transform=transforms.Compose(
             [
-                MutualRandomHorizontalFlip(),
-                MutualRandomVerticalFlip(),
+                mutual_horizontal_flip,
+                mutual_vertical_flip,
             ]
         ),
+        use_csv_samples=True,
+        samples_flip_hooks=[mutual_horizontal_flip, mutual_vertical_flip],
     )
 
     # dataloader
@@ -276,6 +380,8 @@ def test_dataset(device="cpu"):
 
         rgb_imgs = data[0]
         d_imgs = data[1]
+        masks = data[2]
+        depth_samples = data[3]
 
         for i in range(rgb_imgs.size(0)):
 

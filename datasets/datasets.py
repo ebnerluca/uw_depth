@@ -10,13 +10,14 @@ from depth_estimation.utils.data import (
 from torchvision import transforms
 
 
-def get_flsea_dataset(device, split="", train=False):
+def get_flsea_dataset(device="cpu", split="", train=False, use_csv_samples=False):
 
     # define csv files for input target pairs
-    pairs_csv_files = [
+    path_tuples_csv_files = [
         f"/home/auv/FLSea/archive/canyons/flatiron/flatiron/imgs/{split}.csv",
         f"/home/auv/FLSea/archive/canyons/horse_canyon/horse_canyon/imgs/{split}.csv",
         f"/home/auv/FLSea/archive/canyons/tiny_canyon/tiny_canyon/imgs/{split}.csv",
+        f"/home/auv/FLSea/archive/canyons/u_canyon/u_canyon/imgs/{split}.csv",
         f"/home/auv/FLSea/archive/red_sea/big_dice_loop/big_dice_loop/imgs/{split}.csv",
         f"/home/auv/FLSea/archive/red_sea/coral_table_loop/coral_table_loop/imgs/{split}.csv",
         f"/home/auv/FLSea/archive/red_sea/cross_pyramid_loop/cross_pyramid_loop/imgs/{split}.csv",
@@ -24,10 +25,11 @@ def get_flsea_dataset(device, split="", train=False):
         f"/home/auv/FLSea/archive/red_sea/landward_path/landward_path/imgs/{split}.csv",
         f"/home/auv/FLSea/archive/red_sea/pier_path/pier_path/imgs/{split}.csv",
         f"/home/auv/FLSea/archive/red_sea/sub_pier/sub_pier/imgs/{split}.csv",
+        f"/home/auv/FLSea/archive/red_sea/northeast_path/northeast_path/imgs/{split}.csv",
     ]
 
     # shuffle for training
-    shuffle = True if train else False
+    shuffle = True  # if train else False
 
     # transforms
     if train:
@@ -40,15 +42,19 @@ def get_flsea_dataset(device, split="", train=False):
         target_transform = transforms.Compose(
             [
                 FloatPILToTensor(device=device),
-                RandomFactor(factor_range=(0.75, 1.25)),  # randomly scale depth
+                # RandomFactor(factor_range=(0.75, 1.25)),  # randomly scale depth
                 ReplaceInvalid(value="max", return_mask=True),
             ]
         )
+        mutual_horizontal_flip = MutualRandomHorizontalFlip()
         both_transform = transforms.Compose(
             [
-                MutualRandomHorizontalFlip(),
+                mutual_horizontal_flip,
             ]
         )
+        samples_flip_hooks = (mutual_horizontal_flip, None)
+
+    # if not train
     else:
         input_transform = transforms.Compose(
             [
@@ -61,25 +67,29 @@ def get_flsea_dataset(device, split="", train=False):
                 ReplaceInvalid(value="max", return_mask=True),
             ]
         )
+        samples_flip_hooks = (None, None)
         both_transform = None
 
     # instantiate dataset
     dataset = InputTargetDataset(
-        pairs_csv_files=pairs_csv_files,
+        path_tuples_csv_files=path_tuples_csv_files,
         shuffle=shuffle,
         input_transform=input_transform,
         target_transform=target_transform,
         both_transform=both_transform,
+        use_csv_samples=use_csv_samples,
+        samples_flip_hooks=samples_flip_hooks,
+        max_samples=200,
     )
 
     return dataset
 
 
-def get_usod10k_dataset(device, split="", train=False):
+def get_usod10k_dataset(device="cpu", split="", train=False, use_csv_samples=False):
 
     # define csv files for input target pairs
-    pairs_csv_files = [
-        f"/home/auv/USOD10k/{split}.csv",
+    path_tuples_csv_files = [
+        f"/home/auv/FLSea/archive/canyons/flatiron/flatiron/imgs/{split}.csv",
     ]
 
     # shuffle for training
@@ -99,11 +109,15 @@ def get_usod10k_dataset(device, split="", train=False):
                 ReplaceInvalid(value="max", return_mask=True),
             ]
         )
+        mutual_horizontal_flip = MutualRandomHorizontalFlip()
         both_transform = transforms.Compose(
             [
-                MutualRandomHorizontalFlip(),
+                mutual_horizontal_flip,
             ]
         )
+        samples_flip_hooks = (mutual_horizontal_flip, None)
+
+    # if not train
     else:
         input_transform = transforms.Compose(
             [
@@ -117,14 +131,18 @@ def get_usod10k_dataset(device, split="", train=False):
             ]
         )
         both_transform = None
+        samples_flip_hooks = (None, None)
 
     # instantiate dataset
     dataset = InputTargetDataset(
-        pairs_csv_files=pairs_csv_files,
+        path_tuples_csv_files=path_tuples_csv_files,
         shuffle=shuffle,
         input_transform=input_transform,
         target_transform=target_transform,
         both_transform=both_transform,
+        use_csv_samples=use_csv_samples,
+        samples_flip_hooks=samples_flip_hooks,
+        max_samples=200,
     )
 
     return dataset

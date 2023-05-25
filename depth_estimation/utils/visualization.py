@@ -54,33 +54,71 @@ from torchvision.utils import make_grid
 #     out = cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
 
 #     return out
-def get_bin_centers_img(bin_edges, size, device="cpu"):
+def get_bin_centers_img(bin_edges, target, mask, device="cpu"):
 
-    # target shape
-    n_batch = size[0]
-    height = size[2]
-    width = size[3]
+    # target shapes
+    n_batch = target.size(0)
+    n_edges = bin_edges.size(1)
+    n_bins = n_edges - 1
+    height = target.size(2)
+    width = target.size(3)
 
-    bin_centers_img = torch.zeros(n_batch, 1, 1, width).to(device)
-
+    # get target bin edges by sampling the sorged target imgs at their quantiles
+    target_bin_edges = torch.empty(n_batch, n_edges).to(device)
     for i in range(n_batch):
-        # norm bin edges to [0,1]
-        min = bin_edges[i, ...].min()
-        max = bin_edges[i, ...].max()
-        bin_edges_normed = (bin_edges - min) / (max - min)
 
-        n_bins = bin_edges_normed.size(1) - 1
+        target_sorted, _ = target[i, mask[i]].sort()
+        step = target_sorted.size(0) / n_edges
+        target_bin_edge_idcs = (torch.arange(n_edges) * step).long()
+        target_bin_edges[i, ...] = target_sorted[target_bin_edge_idcs]
+
+    # norm bin edges to [0,1]
+    max_edges = bin_edges.amax(dim=1)
+    max_target_edges = target_bin_edges.amax(dim=1)
+    max = torch.stack([max_edges, max_target_edges]).amax(dim=0).unsqueeze(-1)  # Nx1
+    bin_edges_normed = bin_edges / max
+    target_bin_edges_normed = target_bin_edges / max
+
+    # initialize out img and lines
+    bin_edges_img = torch.zeros(n_batch, 1, height, width).to(device)
+    bin_edges_img_line = torch.ones(n_batch, 1, 1, width).to(device) * 0.5
+    target_bin_edges_img_line = torch.ones(n_batch, 1, 1, width).to(device) * 0.5
+
+    n_bins = bin_edges_normed.size(1) - 1
+    for i in range(n_batch):
+
+        # draw bins
         black_white = True  # alternating black/white color for good visibility
         for j in range(n_bins):
+
+            # get bin edges
             edge_start = (bin_edges_normed[i, j] * (width - 1)).int().item()
             edge_end = (bin_edges_normed[i, j + 1] * (width - 1)).int().item()
-            bin_centers_img[i, 0, 0, edge_start:edge_end] = float(black_white)
+            target_edge_start = (
+                (target_bin_edges_normed[i, j] * (width - 1)).int().item()
+            )
+            target_edge_end = (
+                (target_bin_edges_normed[i, j + 1] * (width - 1)).int().item()
+            )
+
+            # draw lines
+            bin_edges_img_line[i, 0, 0, edge_start:edge_end] = float(black_white)
+            target_bin_edges_img_line[
+                i, 0, 0, target_edge_start:target_edge_end
+            ] = float(black_white)
+
+            # alternate color
             black_white = not black_white
 
-    # extend rows
-    bin_centers_img = bin_centers_img.repeat(1, 1, height, 1)
+    # expand lines to multiple img rows to create full img
+    bin_edges_img[:, :, : int(height / 2), :] = target_bin_edges_img_line.expand(
+        n_batch, 1, int(height / 2), width
+    )
+    bin_edges_img[:, :, int(height / 2) :, :] = bin_edges_img_line.expand(
+        n_batch, 1, int(height / 2), width
+    )
 
-    return bin_centers_img
+    return bin_edges_img
 
 
 def gray_to_heatmap(gray, colormap="inferno_r", normalize=True, device="cpu"):
@@ -140,7 +178,8 @@ def get_tensorboard_grids(X, y, prior, pred, mask, bin_edges, device="cpu"):
     )
 
     # get bin center visualization
-    bin_centers_img = get_bin_centers_img(bin_edges, pred.size(), device=device)
+    bin_centers_img = get_bin_centers_img(bin_edges, y, mask, device=device)
+
     # get heatmaps
     y_heatmap = gray_to_heatmap(y, device=device)
     pred_heatmap = gray_to_heatmap(pred, device=device)
