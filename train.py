@@ -8,7 +8,10 @@ import datetime
 import os
 
 from depth_estimation.model.model import UDFNet
-from depth_estimation.utils.depth_prior import get_depth_prior_from_ground_truth
+from depth_estimation.utils.depth_prior import (
+    get_depth_prior_from_ground_truth,
+    get_depth_prior_from_features,
+)
 from depth_estimation.utils.loss import (
     CombinedLoss,
     SILogLoss,
@@ -56,13 +59,21 @@ VALIDATION_LOSS_FUNCTIONS_NAMES = [
 ]
 
 # datasets
-TRAIN_DATASET = get_usod10k_dataset(DEVICE, split="train", train=True)
-VALIDATION_DATASET = get_usod10k_dataset(DEVICE, split="validation", train=False)
+# TRAIN_DATASET = get_usod10k_dataset(DEVICE, split="train", train=True)
+# VALIDATION_DATASET = get_usod10k_dataset(DEVICE, split="validation", train=False)
+TRAIN_DATASET = get_flsea_dataset(
+    DEVICE, split="dataset_with_features", train=True, use_csv_samples=True
+)
+VALIDATION_DATASET = get_flsea_dataset(
+    DEVICE, split="test_with_features", train=False, use_csv_samples=True
+)
+
 
 # tensorboard output frequencies
 WRITE_TRAIN_IMG_EVERY_N_BATCHES = 300
-WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
+WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 50
 
+# torch.autograd.set_detect_anomaly(True)
 ##########################################
 ##########################################
 ##########################################
@@ -86,7 +97,7 @@ def train_UDFNet():
     summary_writer = SummaryWriter(run_name)
 
     # initialize model
-    model = UDFNet(n_bins=80, normalized_output=True).to(DEVICE)
+    model = UDFNet(n_bins=80).to(DEVICE)
 
     # dataloaders
     train_dataloader = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE)
@@ -171,33 +182,43 @@ def train_epoch(
         X = data[0].to(DEVICE)  # RGB image
         y = data[1].to(DEVICE)  # depth image
         mask = data[2].to(DEVICE)  # mask for valid values
+        features = data[3].to(DEVICE)  # precomputed features and depth values
 
         # get sparse prior parametrization
-        if n_priors_max > n_priors_min:
-            n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
-        else:
-            n_priors = n_priors_max
+        # if n_priors_max > n_priors_min:
+        #     n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
+        # else:
+        #     n_priors = n_priors_max
 
-        prior, _ = get_depth_prior_from_ground_truth(
-            y,
-            n_samples=n_priors,
-            mu=0.0,
-            std=10.0,
-            masks=mask,
-            device=DEVICE,
+        # prior, _ = get_depth_prior_from_ground_truth(
+        #     y,
+        #     n_samples=n_priors,
+        #     mu=0.0,
+        #     std=10.0,
+        #     masks=mask,
+        #     device=DEVICE,
+        # )
+
+        prior = get_depth_prior_from_features(
+            features=features, height=240, width=320, mu=0.0, std=10.0, device=DEVICE
         )
 
         # prediction
         pred, bin_edges = model(X, prior)
+        bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
 
         # loss
-        batch_loss = loss_fn(pred, y, bin_edges, mask)
+        batch_loss = loss_fn(pred, y, bin_centers, mask)
         training_loss += batch_loss.item()
 
         # backpropagation
         optimizer.zero_grad()
         batch_loss.backward()
         optimizer.step()
+
+        # print(f"maxd: {bin_edges[:,-1]}")
+        # print(f"maxd target: {y.amax(dim=(2,3))}")
+        # print(f"maxd pred: {pred.amax(dim=(2,3))}")
 
         # tensorboard summary grids for visual inspection
         if (batch_id % WRITE_TRAIN_IMG_EVERY_N_BATCHES == 0) and (
@@ -223,6 +244,8 @@ def train_epoch(
             print(
                 f"batch {batch_id}/{n_batches}, batch training loss: {batch_loss.item()}"
             )
+            # print(f"maxd target: {y.amax(dim=(2,3))}")
+            # print(f"maxd pred: {pred.amax(dim=(2,3))}")
 
     avg_batch_loss = training_loss / n_batches
     print(f"Average batch training loss: {avg_batch_loss}")
@@ -251,32 +274,37 @@ def validate(
         X = data[0].to(DEVICE)  # RGB image
         y = data[1].to(DEVICE)  # depth image
         mask = data[2].to(DEVICE)  # mask for valid values
-        y_masked = y[mask]
+        features = data[3].to(DEVICE)  # precomputed features and depth values
 
         # get prior parametrization
-        if n_priors_max > n_priors_min:
-            n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
-        else:
-            n_priors = n_priors_max
-        prior, _ = get_depth_prior_from_ground_truth(
-            y,
-            n_samples=n_priors,
-            mu=MU,
-            std=STD_DEV,
-            masks=mask,
-            device=DEVICE,
+        # if n_priors_max > n_priors_min:
+        #     n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
+        # else:
+        #     n_priors = n_priors_max
+        # prior, _ = get_depth_prior_from_ground_truth(
+        #     y,
+        #     n_samples=n_priors,
+        #     mu=MU,
+        #     std=STD_DEV,
+        #     masks=mask,
+        #     device=DEVICE,
+        # )
+        prior = get_depth_prior_from_features(
+            features=features, height=240, width=320, mu=0.0, std=10.0, device=DEVICE
         )
 
         # prediction
         pred, bin_edges = model(X, prior)
         pred_masked = pred[mask]
+        bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
 
         # add loss
+        y_masked = y[mask]
         batch_losses = torch.zeros(len(VALIDATION_LOSS_FUNCTIONS), device=DEVICE)
         for i in range(3):
             batch_losses[i] = VALIDATION_LOSS_FUNCTIONS[i](pred_masked, y_masked)
         batch_losses[3] = VALIDATION_LOSS_FUNCTIONS[3](y, bin_edges)  # Chamfer
-        batch_losses[4] = VALIDATION_LOSS_FUNCTIONS[4](pred, y, bin_edges, mask)  # Comb
+        batch_losses[4] = VALIDATION_LOSS_FUNCTIONS[4](pred, y, bin_centers, mask)
         # batch_losses = get_batch_losses(pred, y, loss_functions, mask, device=DEVICE)
         validation_losses += batch_losses
 
