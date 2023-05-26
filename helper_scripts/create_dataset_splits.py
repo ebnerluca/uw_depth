@@ -3,27 +3,31 @@
 
 import csv
 import glob
-from os.path import join, basename, exists
+from os.path import join, basename, exists, splitext
 import cv2
 import numpy as np
 import pandas as pd
 import random
 
 ###### CONFIG
-
-images_folder = "/home/auv/FLSea/archive/red_sea/pier_path/pier_path/imgs/"
-ground_truth_depth_folder = "/home/auv/FLSea/archive/red_sea/pier_path/pier_path/depth/"
+location = "u_canyon"
+images_folder = f"/home/auv/FLSea/archive/canyons/{location}/{location}/imgs"
+ground_truth_depth_folder = (
+    f"/home/auv/FLSea/archive/canyons/{location}/{location}/depth"
+)
+features_folder = join(images_folder, "features")  # precomputed depth features, if any
 images_pattern = ".tiff"
 ground_truth_depth_pattern = "_SeaErra_abs_depth.tif"
+features_pattern = "_features.csv"
 split_sizes = [
     1.0,
-    0.0,
-    0.0,
+    # 0.0,
+    # 0.0,
 ]  # train, validation, test percentage: Must add up to 1.
 split_names = [
-    "train",
-    "validation",
-    "test",
+    "dataset_with_features",
+    # "tmp",
+    # "tmp",
 ]
 allow_zero = True  # allow depth imgs with pixel values zero (=invalid)
 allow_zero_range = False  # allow img range [0,0]
@@ -106,7 +110,11 @@ for i in range(n_splits):
     split_name = split_names[i]
     split_imgs = [img for img, _ in splits[i]]
     split_depths = [depth for _, depth in splits[i]]
-    d = {"img": split_imgs, "depth": split_depths}
+    split_features = [
+        join(features_folder, splitext(basename(img))[0] + features_pattern)
+        for img in split_imgs
+    ]
+    d = {"img": split_imgs, "depth": split_depths, "features": split_features}
     df = pd.DataFrame.from_dict(d)
     df.to_csv(join(images_folder, split_name + ".csv"), index=False, header=False)
 
