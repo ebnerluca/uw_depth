@@ -152,18 +152,17 @@ def get_depth_prior_from_features(
     width=320,
     mu=0.0,
     std=1.0,
-    device="cpu",
 ):
-    """Takes lists of pixel indeces and their respective depth probes and
+    """Takes lists of pixel indices and their respective depth probes and
     returns a depth prior parametrization."""
 
     batch_size = features.size(0)
 
     # depth prior maps
-    prior_maps = torch.empty(batch_size, 1, height, width).to(device)
+    prior_maps = torch.empty(batch_size, 1, height, width).to(features.device)
 
     # euclidean distance maps
-    distance_maps = torch.empty(batch_size, 1, height, width).to(device)
+    distance_maps = torch.empty(batch_size, 1, height, width).to(features.device)
 
     # for every img, cannot vectorize because of masks with unequal length
     # (different images may have different number of features)
@@ -187,7 +186,7 @@ def get_depth_prior_from_features(
 
         # get n_samples x height x width dist maps
         sample_dist_maps = get_distance_maps(
-            height, width, idcs_height, idcs_width, device=device
+            height, width, idcs_height, idcs_width, device=features.device
         )
         # try:
         # find min and argmin
@@ -207,7 +206,9 @@ def get_depth_prior_from_features(
 
     # probability model:
     # convert pixel distance to signal strength
-    signal_strength_maps = get_signal_maps(distance_maps, mu=mu, std=std, device=device)
+    signal_strength_maps = get_signal_maps(
+        distance_maps, mu=mu, std=std, device=features.device
+    )
 
     # parametrization
     parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW

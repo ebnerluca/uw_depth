@@ -11,15 +11,17 @@ import pandas as pd
 import random
 from os.path import exists
 
+from .depth_prior import get_depth_prior_from_features
+
 
 class InputTargetDataset:
     """Parameters:
     - path_tuples_csv_files: List of filepaths to csv files which list image tuples (input, target (,features))
-    - input_transform: Transform to apply to the input RGB image, needs to return torch Tensor
-    - target_transform: Transform to apply to the target depth image, needs to return torch Tensor and corresponding mask
-    - both_transform: Transform to apply to both input and target image, needs to return torch Tensor
+    - input_transform: Transform to apply to the input RGB image, returns torch Tensor
+    - target_transform: Transform to apply to the target depth image, returns torch Tensor
+    - all_transform: Transform to apply to both input, target and mask image (and depth samples as well), returns list of torch Tensors
+    - target_samples_transform: Transfrom to apply to both target and depth samples, returns list of torch Tensors
     - use_csv_samples: Bool to specify if depth samples should be drawn randomly or from saved csv file
-    - samples_flip_hooks: Transform tuple hooks needed so samples can be flipped mutually with the rgb and depth img
     - max_samples: max number of samples per image"""
 
     def __init__(
@@ -27,17 +29,17 @@ class InputTargetDataset:
         path_tuples_csv_files,
         input_transform,
         target_transform,
+        all_transform=None,
         shuffle=False,
-        both_transform=None,
         use_csv_samples=False,
-        samples_flip_hooks=(None, None),  # horizontal, vertical flip
+        target_samples_transform=None,
         max_samples=200,
     ) -> None:
 
         # transforms applied to input and target
         self.input_transform = input_transform
         self.target_transform = target_transform
-        self.both_transform = both_transform
+        self.all_transform = all_transform
 
         # load tuples
         self.path_tuples = []
@@ -54,7 +56,7 @@ class InputTargetDataset:
 
         # depth_samples
         self.use_csv_samples = use_csv_samples
-        self.samples_flip_hooks = samples_flip_hooks
+        self.target_samples_transform = target_samples_transform
         self.max_samples = max_samples
 
         # checking dataset for missing files
@@ -77,60 +79,50 @@ class InputTargetDataset:
         input_img = Image.open(input_fn).resize((640, 480))
         target_img = Image.open(target_fn).resize((320, 240), resample=Image.NEAREST)
 
-        # apply transforms
+        # apply input/target transforms
         input_img = self.input_transform(input_img)
         target_img, mask = self.target_transform(target_img)
 
-        if (input_img is None) or (target_img is None) or (mask is None):
-            print(f"Loading img tuple failed, received None. paths:")
-            print(input_fn)
-            print(target_fn)
-            print("Trying other image as substitution ...")
+        if not mask.any():
+            print(
+                f"File {target_fn} has no valid depth values, trying other image as substitution ..."
+            )
             random_idx = np.random.randint(0, len(self))
             return self[random_idx]  # recursion
 
-        if self.both_transform is not None:
-            input_img, target_img, mask = self.both_transform(
-                [input_img, target_img, mask]
-            )
-
-        # read precomputed depth samples from csv
+        # read features
         if self.use_csv_samples:
+            depth_samples_fn = self.path_tuples[idx][2]
+            depth_samples = self.read_features(
+                depth_samples_fn, device=target_img.device
+            )
+            parametrization = get_depth_prior_from_features(
+                features=depth_samples.unsqueeze(0),  # add batch dimension
+                height=240,
+                width=320,
+                mu=0.0,
+                std=10.0,
+            ).squeeze(
+                0
+            )  # remove batch dimension
 
-            depth_samples_csv_file = self.path_tuples[idx][2]
-
-            # need same dimensions for minibatch stacking, so we fix it
-            depth_samples = np.zeros((self.max_samples, 3), dtype=np.float32)
-
-            # load actual samples (might be less than n_samples)
-            depth_samples_data = pd.read_csv(depth_samples_csv_file).to_numpy()[
-                : self.max_samples
-            ]
-
-            # give warning when no features
-            if len(depth_samples_data) == 0:
-                print(
-                    f"WARNING: Features list {self.path_tuples[idx][2]} is empty, placeholder parametrization will be used!"
+            # apply transform to target and samples
+            if self.target_samples_transform is not None:
+                target_img, parametrization = self.target_samples_transform(
+                    [target_img, parametrization]
                 )
 
-            # fill in data where available
-            depth_samples[: len(depth_samples_data)] = depth_samples_data
+        # list of all output tensors
+        tensor_list = [input_img, target_img, mask]
+        if self.use_csv_samples:
+            tensor_list.append(parametrization)
 
-            # tensor from numpy
-            depth_samples = torch.from_numpy(depth_samples).to(input_img.device)
+        # apply mutual transforms
+        if self.all_transform is not None:
 
-            # perform same flips as input and target for depth samples
-            for hook in self.samples_flip_hooks:
-                if hook is not None:
-                    depth_samples = hook(
-                        [depth_samples],
-                        flip_same_as_last=True,
-                        index_tensor_hw=(240, 320),
-                    )[0]
+            tensor_list = self.all_transform(tensor_list)
 
-            return input_img, target_img, mask, depth_samples
-
-        return input_img, target_img, mask
+        return tensor_list
 
     def check_dataset(self):
         """Checks dataset for missing files."""
@@ -153,6 +145,26 @@ class InputTargetDataset:
 
         return True
 
+    def read_features(self, path, device="cpu"):
+
+        # load samples (might be less than n_samples)
+        depth_samples_data = pd.read_csv(path).to_numpy()  # [: self.max_samples]
+
+        # give warning when no features
+        if len(depth_samples_data) == 0:
+            print(
+                f"WARNING: Features list {path} is empty, placeholder parametrization will be used!"
+            )
+            depth_samples = np.zeros((1, 3))  # placeholder
+        else:
+            rand_idcs = torch.randperm(len(depth_samples_data))[: self.max_samples]
+            depth_samples = depth_samples_data[rand_idcs]
+
+        # tensor from numpy
+        depth_samples = torch.from_numpy(depth_samples).to(device)
+
+        return depth_samples
+
 
 class MutualRandomHorizontalFlip:
     """Randomly flips an input RGB imape and corresponding depth target horizontally with probability p.\\
@@ -160,29 +172,17 @@ class MutualRandomHorizontalFlip:
 
     def __init__(self, p=0.5) -> None:
         self.p = p
-        self.flipped_last = False
 
-    def __call__(self, tensors, flip_same_as_last=False, index_tensor_hw=(None, None)):
+    def __call__(self, tensors):
 
-        # do flip or not
-        if flip_same_as_last:
-            do_flip = self.flipped_last
-        else:
-            do_flip = torch.rand(1) < self.p
+        do_flip = torch.rand(1) < self.p
 
         # flip
         if do_flip:
-            # iterate through list of tensors (usually [rgb, depth] or [depth_samples])
+
             for i in range(len(tensors)):
 
-                # check if tensor is image or list of depth samples
-                if tensors[i].size(-1) == 3:  # tensor is list of depth samples
-                    tensors[i][:, 1] = index_tensor_hw[1] - 1.0 - tensors[i][..., 1]
-                else:  # tensor is img
-                    tensors[i] = hflip(tensors[i])
-
-        # save state so features can be flipped accordingly
-        self.flipped_last = do_flip
+                tensors[i] = hflip(tensors[i])
 
         return tensors
 
@@ -193,29 +193,15 @@ class MutualRandomVerticalFlip:
 
     def __init__(self, p=0.5) -> None:
         self.p = p
-        self.flipped_last = False
 
-    def __call__(self, tensors, flip_same_as_last=False, index_tensor_hw=(None, None)):
-
-        # do flip or not
-        if flip_same_as_last:
-            do_flip = self.flipped_last
-        else:
-            do_flip = torch.rand(1) < self.p
+    def __call__(self, tensors):
+        do_flip = torch.rand(1) < self.p
 
         # flip
         if do_flip:
-            # iterate through list of tensors (usually [rgb, depth] or [depth_samples])
             for i in range(len(tensors)):
 
-                # check if tensor is image or list of depth samples
-                if tensors[i].size(-1) == 3:  # tensor is list of depth samples
-                    tensors[i][:, 0] = index_tensor_hw[0] - 1.0 - tensors[i][..., 0]
-                else:  # tensor is img
-                    tensors[i] = vflip(tensors[i])
-
-        # save state so features can be flipped accordingly
-        self.flipped_last = do_flip
+                tensors[i] = vflip(tensors[i])
 
         return tensors
 
@@ -266,57 +252,46 @@ class FloatPILToTensor:
         # enforce dimension order: channels x height x width
         if img_np.ndim == 2:
             img_np = img_np[np.newaxis, ...]
-        # if mask.ndim == 2:
-        #     mask = mask[np.newaxis, ...]
 
         # convert to tensor
         img_tensor = torch.from_numpy(img_np).to(self.device)
-        # mask = torch.from_numpy(mask).to(self.device)
 
         return img_tensor  # , mask
 
 
-class RandomFactor:
+class MutualRandomFactor:
     def __init__(self, factor_range=(0.75, 1.25)) -> None:
         self.factor_range = factor_range
 
-    def __call__(self, tensor):
-        if tensor is None:
-            return None
+    def __call__(self, tensors):
 
         factor = (
             torch.rand(1).item() * (self.factor_range[1] - self.factor_range[0])
             + self.factor_range[0]
         )
 
-        tensor *= factor
+        for i in range(len(tensors)):
 
-        return tensor
+            tensors[i][0, ...] *= factor
+
+        return tensors
 
 
 class ReplaceInvalid:
-    def __init__(self, value=None, return_mask=False) -> None:
+    def __init__(self, value=None):
         self.value = value
-        self.return_mask = return_mask
 
     def __call__(self, tensor):
 
-        if tensor is None:
-            if self.return_mask:
-                return None, None
-            else:
-                return None
-
-        # mask all valid pixels (> 0.0)
-        mask = tensor.gt(0.0)
+        mask = get_mask(tensor)
 
         # if mask is empty, return None
         if not mask.any():
-            print("Mask is empty, meaning all depth values invalid. Returning None.")
-            if self.return_mask:
-                return None, None
-            else:
-                return None
+            print(
+                "Mask is empty, meaning all depth values invalid. Returning unchanged."
+            )
+
+            return tensor, mask
 
         # change value of non valid pixels
         if self.value is not None:
@@ -329,10 +304,14 @@ class ReplaceInvalid:
             else:
                 tensor[~mask] = self.value
 
-        if self.return_mask:
-            return tensor, mask
-        else:
-            return tensor
+        return tensor, mask
+
+
+def get_mask(depth):
+
+    mask = depth.gt(0.0)
+
+    return mask
 
 
 def test_dataset(device="cpu"):
@@ -343,10 +322,6 @@ def test_dataset(device="cpu"):
     from torchvision import transforms
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
-
-    # define flip transforms (needed for hook usage later, check "sample_flip_hooks"
-    mutual_horizontal_flip = MutualRandomHorizontalFlip()
-    mutual_vertical_flip = MutualRandomVerticalFlip()
 
     # define dataset
     dataset = InputTargetDataset(
@@ -360,21 +335,25 @@ def test_dataset(device="cpu"):
         target_transform=transforms.Compose(
             [
                 FloatPILToTensor(device=device),
-                ReplaceInvalid(return_mask=True),
+                ReplaceInvalid(value="max"),
             ]
         ),
-        both_transform=transforms.Compose(
+        all_transform=transforms.Compose(
             [
-                mutual_horizontal_flip,
-                mutual_vertical_flip,
+                MutualRandomHorizontalFlip(),
+                MutualRandomVerticalFlip(),
             ]
         ),
         use_csv_samples=True,
-        samples_flip_hooks=[mutual_horizontal_flip, mutual_vertical_flip],
+        target_samples_transform=transforms.Compose(
+            [
+                MutualRandomFactor(factor_range=(0.25, 1.75)),
+            ]
+        ),
     )
 
     # dataloader
-    dataloader = DataLoader(dataset, batch_size=2)
+    dataloader = DataLoader(dataset, batch_size=4)
 
     for batch_id, data in enumerate(dataloader):
 
@@ -387,13 +366,27 @@ def test_dataset(device="cpu"):
 
             rgb_img = rgb_imgs[i, ...]
             d_img = d_imgs[i, ...]
+            mask = masks[i, ...]
+            d_samples = depth_samples[i, ...]
+            print(f"d range: [{d_img.min()}, {d_img.max()}]")
             plt.figure(f"rgb img {i}")
             plt.imshow(rgb_img.permute(1, 2, 0))
             plt.figure(f"d img {i}")
             plt.imshow(d_img.permute(1, 2, 0))
+            plt.figure(f"mask {i}")
+            plt.imshow(mask.permute(1, 2, 0))
+            plt.figure(f"depth with features {i}")
+            plt.imshow(d_img.permute(1, 2, 0))
+            plt.scatter(x=d_samples[:, 1], y=d_samples[:, 0])
 
-            # print(f"prior map {i} range: [{prior_map.min()}, {prior_map.max()}]")
-            # print(f"signal map {i} range: [{signal_map.min()}, {signal_map.max()}]")
+            d_img_values = d_img[
+                :, d_samples[:, 0].round().long(), d_samples[:, 1].round().long()
+            ].squeeze()[:5]
+            d_samples_values = d_samples[:, 2][:5]
+
+            print(f"depth values at feature location: {d_img_values}")
+            print(f"depth values of features: {d_samples_values}")
+
         plt.show()
 
         break  # only check first batch

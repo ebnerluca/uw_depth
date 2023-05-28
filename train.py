@@ -32,15 +32,10 @@ BATCH_SIZE = 6
 LEARNING_RATE = 0.0001
 LEARNING_RATE_DECAY = 1.0
 EPOCHS = 100
-LOSS_FN = CombinedLoss(w_silog=0.6, w_l2=0.4, w_bins=0.5)
+LOSS_FN = CombinedLoss(w_silog=0.6, w_l2=0.4, w_bins=1.0)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # DEVICE = "cpu"
 
-# sampling parameters
-N_PRIORS_MAX = 200
-N_PRIORS_MIN = 200
-MU = 0.0
-STD_DEV = 10.0
 
 # validation parameters
 VALIDATION_LOSS_FUNCTIONS = [
@@ -48,7 +43,7 @@ VALIDATION_LOSS_FUNCTIONS = [
     torch.nn.L1Loss(),
     SILogLoss(),
     ChamferDistanceLoss(),
-    CombinedLoss(w_silog=0.6, w_l2=0.4, w_bins=0.5),
+    CombinedLoss(w_silog=0.6, w_l2=0.4, w_bins=1.0),
 ]
 VALIDATION_LOSS_FUNCTIONS_NAMES = [
     "validation_loss/L2 Loss (RMSE)",
@@ -62,10 +57,18 @@ VALIDATION_LOSS_FUNCTIONS_NAMES = [
 # TRAIN_DATASET = get_usod10k_dataset(DEVICE, split="train", train=True)
 # VALIDATION_DATASET = get_usod10k_dataset(DEVICE, split="validation", train=False)
 TRAIN_DATASET = get_flsea_dataset(
-    DEVICE, split="dataset_with_features", train=True, use_csv_samples=True
+    DEVICE,
+    split="dataset_with_matched_features",
+    train=True,
+    use_csv_samples=True,
+    shuffle=True,
 )
 VALIDATION_DATASET = get_flsea_dataset(
-    DEVICE, split="test_with_features", train=False, use_csv_samples=True
+    DEVICE,
+    split="test_with_matched_features",
+    train=False,
+    use_csv_samples=True,
+    shuffle=True,
 )
 
 
@@ -83,7 +86,7 @@ def train_UDFNet():
     """Train loop to train a UDFNet model."""
 
     # print run infos
-    run_name = f"udfnet_np{N_PRIORS_MIN}-{N_PRIORS_MAX}_lr{LEARNING_RATE}_bs{BATCH_SIZE}_lrd{LEARNING_RATE_DECAY}"
+    run_name = f"udfnet_lr{LEARNING_RATE}_bs{BATCH_SIZE}_lrd{LEARNING_RATE_DECAY}"
     print(
         f"Training run {run_name} with parameters:\n"
         + f"    learning rate: {LEARNING_RATE}\n"
@@ -100,7 +103,9 @@ def train_UDFNet():
     model = UDFNet(n_bins=80).to(DEVICE)
 
     # dataloaders
-    train_dataloader = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE)
+    train_dataloader = DataLoader(
+        TRAIN_DATASET, batch_size=BATCH_SIZE
+    )  # , shuffle=True)
     validation_dataloader = DataLoader(VALIDATION_DATASET, batch_size=BATCH_SIZE)
 
     for epoch in range(EPOCHS):
@@ -119,8 +124,6 @@ def train_UDFNet():
             dataloader=train_dataloader,
             model=model,
             learning_rate=lr,
-            n_priors_min=N_PRIORS_MIN,
-            n_priors_max=N_PRIORS_MAX,
             loss_fn=LOSS_FN,
             epoch=epoch,
         )
@@ -132,8 +135,6 @@ def train_UDFNet():
         validation_losses = validate(
             dataloader=validation_dataloader,
             model=model,
-            n_priors_min=N_PRIORS_MIN,
-            n_priors_max=N_PRIORS_MAX,
             loss_functions=VALIDATION_LOSS_FUNCTIONS,
             epoch=epoch,
         )
@@ -155,8 +156,6 @@ def train_epoch(
     model,
     loss_fn,
     learning_rate,
-    n_priors_min=100,
-    n_priors_max=100,
     epoch=0,
 ):
     """Train a model for one epoch.
@@ -182,26 +181,7 @@ def train_epoch(
         X = data[0].to(DEVICE)  # RGB image
         y = data[1].to(DEVICE)  # depth image
         mask = data[2].to(DEVICE)  # mask for valid values
-        features = data[3].to(DEVICE)  # precomputed features and depth values
-
-        # get sparse prior parametrization
-        # if n_priors_max > n_priors_min:
-        #     n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
-        # else:
-        #     n_priors = n_priors_max
-
-        # prior, _ = get_depth_prior_from_ground_truth(
-        #     y,
-        #     n_samples=n_priors,
-        #     mu=0.0,
-        #     std=10.0,
-        #     masks=mask,
-        #     device=DEVICE,
-        # )
-
-        prior = get_depth_prior_from_features(
-            features=features, height=240, width=320, mu=0.0, std=10.0, device=DEVICE
-        )
+        prior = data[3].to(DEVICE)  # precomputed features and depth values
 
         # prediction
         pred, bin_edges = model(X, prior)
@@ -244,6 +224,7 @@ def train_epoch(
             print(
                 f"batch {batch_id}/{n_batches}, batch training loss: {batch_loss.item()}"
             )
+            # print(f"maxd: {bin_edges[:,-1]}")
             # print(f"maxd target: {y.amax(dim=(2,3))}")
             # print(f"maxd pred: {pred.amax(dim=(2,3))}")
 
@@ -257,8 +238,6 @@ def validate(
     dataloader,
     model,
     loss_functions,
-    n_priors_min=100,
-    n_priors_max=100,
     epoch=0,
 ):
     """Validate a model, typically done after each training epoch."""
@@ -274,24 +253,7 @@ def validate(
         X = data[0].to(DEVICE)  # RGB image
         y = data[1].to(DEVICE)  # depth image
         mask = data[2].to(DEVICE)  # mask for valid values
-        features = data[3].to(DEVICE)  # precomputed features and depth values
-
-        # get prior parametrization
-        # if n_priors_max > n_priors_min:
-        #     n_priors = torch.randint(n_priors_min, n_priors_max, (1,)).item()
-        # else:
-        #     n_priors = n_priors_max
-        # prior, _ = get_depth_prior_from_ground_truth(
-        #     y,
-        #     n_samples=n_priors,
-        #     mu=MU,
-        #     std=STD_DEV,
-        #     masks=mask,
-        #     device=DEVICE,
-        # )
-        prior = get_depth_prior_from_features(
-            features=features, height=240, width=320, mu=0.0, std=10.0, device=DEVICE
-        )
+        prior = data[3].to(DEVICE)  # precomputed features and depth values
 
         # prediction
         pred, bin_edges = model(X, prior)
