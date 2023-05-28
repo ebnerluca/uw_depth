@@ -157,7 +157,9 @@ class InputTargetDataset:
             )
             depth_samples = np.zeros((1, 3))  # placeholder
         else:
-            rand_idcs = torch.randperm(len(depth_samples_data))[: self.max_samples]
+            rand_idcs = np.random.permutation(len(depth_samples_data))[
+                : self.max_samples
+            ]
             depth_samples = depth_samples_data[rand_idcs]
 
         # tensor from numpy
