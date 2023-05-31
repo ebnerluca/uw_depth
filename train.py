@@ -2,18 +2,15 @@ import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 
 import time
 import datetime
 import os
 
 from depth_estimation.model.model import UDFNet
-from depth_estimation.utils.depth_prior import (
-    get_depth_prior_from_ground_truth,
-    get_depth_prior_from_features,
-)
+
 from depth_estimation.utils.loss import (
-    CombinedLoss,
     SILogLoss,
     L2Loss,
     ChamferDistanceLoss,
@@ -32,25 +29,30 @@ BATCH_SIZE = 6
 LEARNING_RATE = 0.0001
 LEARNING_RATE_DECAY = 1.0
 EPOCHS = 100
-LOSS_FN = CombinedLoss(w_silog=0.6, w_l2=0.4, w_bins=1.0)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # DEVICE = "cpu"
 
+LOSS_FUNCTIONS = {
+    "SILog_Loss": SILogLoss(),
+    "Chamfer_Loss": ChamferDistanceLoss(),
+    "L2_Loss": L2Loss(),
+    "L1_Loss": torch.nn.L1Loss(),
+}
+LOSS_WEIGHTS = {"w_SILog_Loss": 0.6, "w_Chamfer_Loss": 0.1, "w_L2_Loss": 0.3}
 
-# validation parameters
-VALIDATION_LOSS_FUNCTIONS = [
-    L2Loss(),
-    torch.nn.L1Loss(),
-    SILogLoss(),
-    ChamferDistanceLoss(),
-    CombinedLoss(w_silog=0.6, w_l2=0.4, w_bins=1.0),
+TRAINING_LOSS_NAMES = [
+    "training_loss",
+    "training_loss/SILog Loss",
+    "training_loss/Bins Chamfer Loss",
+    "training_loss/L2 Loss (RMSE)",
+    "training_loss/L1 Loss (MAE)",
 ]
-VALIDATION_LOSS_FUNCTIONS_NAMES = [
-    "validation_loss/L2 Loss (RMSE)",
-    "validation_loss/L1 Loss (MAE)",
+VALIDATION_LOSS_NAMES = [
+    "validation_loss",
     "validation_loss/SILog Loss",
     "validation_loss/Bins Chamfer Loss",
-    "validation_loss",
+    "validation_loss/L2 Loss (RMSE)",
+    "validation_loss/L1 Loss (MAE)",
 ]
 
 # datasets
@@ -71,10 +73,9 @@ VALIDATION_DATASET = get_flsea_dataset(
     shuffle=True,
 )
 
-
 # tensorboard output frequencies
 WRITE_TRAIN_IMG_EVERY_N_BATCHES = 300
-WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 50
+WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
 
 # torch.autograd.set_detect_anomaly(True)
 ##########################################
@@ -103,9 +104,7 @@ def train_UDFNet():
     model = UDFNet(n_bins=80).to(DEVICE)
 
     # dataloaders
-    train_dataloader = DataLoader(
-        TRAIN_DATASET, batch_size=BATCH_SIZE
-    )  # , shuffle=True)
+    train_dataloader = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE, shuffle=True)
     validation_dataloader = DataLoader(VALIDATION_DATASET, batch_size=BATCH_SIZE)
 
     for epoch in range(EPOCHS):
@@ -120,11 +119,10 @@ def train_UDFNet():
 
         # train epoch
         start_time = time.time()
-        training_loss = train_epoch(
+        training_losses = train_epoch(
             dataloader=train_dataloader,
             model=model,
             learning_rate=lr,
-            loss_fn=LOSS_FN,
             epoch=epoch,
         )
         print(
@@ -135,16 +133,13 @@ def train_UDFNet():
         validation_losses = validate(
             dataloader=validation_dataloader,
             model=model,
-            loss_functions=VALIDATION_LOSS_FUNCTIONS,
             epoch=epoch,
         )
 
-        # tensorboard summary
-        summary_writer.add_scalar("training_loss", training_loss, epoch)
-        for i in range(len(validation_losses)):
-            loss = validation_losses[i].item()
-            loss_name = VALIDATION_LOSS_FUNCTIONS_NAMES[i]
-
+        # tensorboard summary for training and validation
+        for loss, loss_name in zip(training_losses, TRAINING_LOSS_NAMES):
+            summary_writer.add_scalar(f"{loss_name}", loss, epoch)
+        for loss, loss_name in zip(validation_losses, VALIDATION_LOSS_NAMES):
             summary_writer.add_scalar(f"{loss_name}", loss, epoch)
 
         # save model
@@ -154,17 +149,13 @@ def train_UDFNet():
 def train_epoch(
     dataloader,
     model,
-    loss_fn,
     learning_rate,
     epoch=0,
 ):
     """Train a model for one epoch.
+    - dataloader: the dataloader to use
     - model: The model to train
-    - loss_fn: The training objective loss function
-    - optimizer: The training optimizer
-    - n_priors: The number of depth priors to sample
-    - n_priors_min: If set, the number of samples is uniformly sampled between n_priors_min and and n_priors_max
-    - device: torch device
+    - learning_rate: the learning rate for the optimizer
     - epoch: epoch id"""
 
     # set training mode
@@ -174,7 +165,8 @@ def train_epoch(
     optimizer = AdamW(model.parameters(), lr=learning_rate)
 
     n_batches = len(dataloader)
-    training_loss = 0.0
+
+    training_losses = np.zeros(len(LOSS_FUNCTIONS) + 1)
     for batch_id, data in enumerate(dataloader):
 
         # move to device
@@ -187,18 +179,35 @@ def train_epoch(
         pred, bin_edges = model(X, prior)
         bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
 
-        # loss
-        batch_loss = loss_fn(pred, y, bin_centers, mask)
-        training_loss += batch_loss.item()
+        # individual losses
+        batch_loss_silog = LOSS_FUNCTIONS["SILog_Loss"](pred, y, mask)
+        batch_loss_chamfer = LOSS_FUNCTIONS["Chamfer_Loss"](y, bin_centers, mask)
+        batch_loss_l2 = LOSS_FUNCTIONS["L2_Loss"](pred, y, mask)
+        batch_loss_l1 = LOSS_FUNCTIONS["L1_Loss"](pred[mask], y[mask])  # , mask)
+
+        # learning objective loss
+        batch_loss = (
+            batch_loss_silog * LOSS_WEIGHTS["w_SILog_Loss"]
+            + batch_loss_chamfer * LOSS_WEIGHTS["w_Chamfer_Loss"]
+            + batch_loss_l2 * LOSS_WEIGHTS["w_L2_Loss"]
+        )
 
         # backpropagation
         optimizer.zero_grad()
         batch_loss.backward()
         optimizer.step()
 
-        # print(f"maxd: {bin_edges[:,-1]}")
-        # print(f"maxd target: {y.amax(dim=(2,3))}")
-        # print(f"maxd pred: {pred.amax(dim=(2,3))}")
+        # statistics for tensorboard visualization graphs
+        batch_losses = np.array(
+            [
+                batch_loss.item(),
+                batch_loss_silog.item(),
+                batch_loss_chamfer.item(),
+                batch_loss_l2.item(),
+                batch_loss_l1.item(),
+            ]
+        )
+        training_losses += batch_losses
 
         # tensorboard summary grids for visual inspection
         if (batch_id % WRITE_TRAIN_IMG_EVERY_N_BATCHES == 0) and (
@@ -221,23 +230,17 @@ def train_epoch(
                 )
 
         if batch_id % 50 == 0:
-            print(
-                f"batch {batch_id}/{n_batches}, batch training loss: {batch_loss.item()}"
-            )
-            # print(f"maxd: {bin_edges[:,-1]}")
-            # print(f"maxd target: {y.amax(dim=(2,3))}")
-            # print(f"maxd pred: {pred.amax(dim=(2,3))}")
+            print(f"batch {batch_id}/{n_batches}, batch training loss: {batch_losses}")
 
-    avg_batch_loss = training_loss / n_batches
-    print(f"Average batch training loss: {avg_batch_loss}")
-    return avg_batch_loss
+    avg_batch_losses = training_losses / n_batches
+    print(f"Average batch training loss: {avg_batch_losses}")
+    return avg_batch_losses
 
 
 @torch.no_grad()  # no gradients needed during validation
 def validate(
     dataloader,
     model,
-    loss_functions,
     epoch=0,
 ):
     """Validate a model, typically done after each training epoch."""
@@ -246,7 +249,8 @@ def validate(
     model.eval()
 
     n_batches = len(dataloader)
-    validation_losses = torch.zeros(len(loss_functions), device=DEVICE)
+
+    validation_losses = np.zeros(len(LOSS_FUNCTIONS) + 1)
     for batch_id, data in enumerate(dataloader):
 
         # move to device
@@ -260,14 +264,29 @@ def validate(
         pred_masked = pred[mask]
         bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
 
-        # add loss
-        y_masked = y[mask]
-        batch_losses = torch.zeros(len(VALIDATION_LOSS_FUNCTIONS), device=DEVICE)
-        for i in range(3):
-            batch_losses[i] = VALIDATION_LOSS_FUNCTIONS[i](pred_masked, y_masked)
-        batch_losses[3] = VALIDATION_LOSS_FUNCTIONS[3](y, bin_edges)  # Chamfer
-        batch_losses[4] = VALIDATION_LOSS_FUNCTIONS[4](pred, y, bin_centers, mask)
-        # batch_losses = get_batch_losses(pred, y, loss_functions, mask, device=DEVICE)
+        # individual losses
+        batch_loss_silog = LOSS_FUNCTIONS["SILog_Loss"](pred, y, mask)
+        batch_loss_chamfer = LOSS_FUNCTIONS["Chamfer_Loss"](y, bin_centers, mask)
+        batch_loss_l2 = LOSS_FUNCTIONS["L2_Loss"](pred, y, mask)
+        batch_loss_l1 = LOSS_FUNCTIONS["L1_Loss"](pred[mask], y[mask])  # , mask)
+
+        # objective (for reference)
+        batch_loss = (
+            batch_loss_silog * LOSS_WEIGHTS["w_SILog_Loss"]
+            + batch_loss_chamfer * LOSS_WEIGHTS["w_Chamfer_Loss"]
+            + batch_loss_l2 * LOSS_WEIGHTS["w_L2_Loss"]
+        )
+
+        # statistics for tensorboard visualization graphs
+        batch_losses = np.array(
+            [
+                batch_loss.item(),
+                batch_loss_silog.item(),
+                batch_loss_chamfer.item(),
+                batch_loss_l2.item(),
+                batch_loss_l1.item(),
+            ]
+        )
         validation_losses += batch_losses
 
         # tensorboard summary grids for visual inspection

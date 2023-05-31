@@ -92,10 +92,20 @@ class InputTargetDataset:
 
         # read features
         if self.use_csv_samples:
+
+            # read depth samples file
             depth_samples_fn = self.path_tuples[idx][2]
             depth_samples = self.read_features(
                 depth_samples_fn, device=target_img.device
             )
+
+            # check if zero valid depths
+            if depth_samples is None:
+                print("Depth samples is None, trying other image as substitution ...")
+                random_idx = np.random.randint(0, len(self))
+                return self[random_idx]  # recursion
+
+            # get parametrization imgs 2x240x320
             parametrization = get_depth_prior_from_features(
                 features=depth_samples.unsqueeze(0),  # add batch dimension
                 height=240,
@@ -152,10 +162,8 @@ class InputTargetDataset:
 
         # give warning when no features
         if len(depth_samples_data) == 0:
-            print(
-                f"WARNING: Features list {path} is empty, placeholder parametrization will be used!"
-            )
-            depth_samples = np.zeros((1, 3))  # placeholder
+            print(f"WARNING: Features list {path} is empty, returning None!")
+            return None
         else:
             rand_idcs = np.random.permutation(len(depth_samples_data))[
                 : self.max_samples

@@ -47,7 +47,7 @@ def get_flsea_dataset(
         all_transform = transforms.Compose([MutualRandomHorizontalFlip()])
         target_samples_transform = transforms.Compose(
             [
-                MutualRandomFactor(factor_range=(0.9, 1.1)),
+                MutualRandomFactor(factor_range=(0.75, 1.25)),
             ]
         )
 

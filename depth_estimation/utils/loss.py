@@ -2,69 +2,69 @@ import torch
 import torch.nn as nn
 
 
-class CombinedLoss(nn.Module):
-    """Learning objective"""
+# class CombinedLoss(nn.Module):
+#     """Learning objective"""
 
-    def __init__(
-        self,
-        w_silog=1.0,
-        w_l2=1.0,
-        w_bins=1.0,
-        w_masked=1.0,
-    ) -> None:
-        super(CombinedLoss, self).__init__()
+#     def __init__(
+#         self,
+#         w_silog=1.0,
+#         w_l2=1.0,
+#         w_bins=1.0,
+#         w_masked=1.0,
+#     ) -> None:
+#         super(CombinedLoss, self).__init__()
 
-        self.name = "CombinedLoss"
+#         self.name = "CombinedLoss"
 
-        # loss components
-        self.silog_loss = SILogLoss()
-        self.l2_loss = L2Loss()
-        self.bins_chamfer_loss = ChamferDistanceLoss()
+#         # loss components
+#         self.silog_loss = SILogLoss()
+#         self.l2_loss = L2Loss()
+#         self.bins_chamfer_loss = ChamferDistanceLoss()
 
-        # weights
-        self.w_silog = w_silog
-        self.w_l2 = w_l2
-        self.w_bins = w_bins
-        self.w_masked = w_masked
+#         # weights
+#         self.w_silog = w_silog
+#         self.w_l2 = w_l2
+#         self.w_bins = w_bins
+#         self.w_masked = w_masked
 
-    def forward(self, prediction, target, bin_edges, mask=None):
+#     def forward(self, prediction, target, bin_edges, mask=None):
 
-        # chamfer loss
-        bins_chamfer_loss = self.bins_chamfer_loss(target, bin_edges, mask)
+#         # chamfer loss
+#         bins_chamfer_loss = self.bins_chamfer_loss(target, bin_edges, mask)
 
-        # apply mask
-        if mask is not None:
-            masked_prediction = prediction[mask]
-            masked_target = target[mask]
-            invalid_prediction = prediction[~mask]
-            invalid_target = target[~mask]
-        else:
-            masked_prediction = prediction
-            masked_target = target
+#         # apply mask
+#         if mask is not None:
+#             masked_prediction = prediction[mask]
+#             masked_target = target[mask]
+#             invalid_prediction = prediction[~mask]
+#             invalid_target = target[~mask]
+#         else:
+#             masked_prediction = prediction
+#             masked_target = target
 
-        # loss components
-        silog_loss = self.silog_loss(masked_prediction, masked_target)
-        l2_loss = self.l2_loss(masked_prediction, masked_target)
+#         # loss components
+#         silog_loss = self.silog_loss(masked_prediction, masked_target)
+#         l2_loss = self.l2_loss(masked_prediction, masked_target)
 
-        # combined loss
-        loss = (
-            self.w_l2 * l2_loss
-            + self.w_silog * silog_loss
-            + self.w_bins * bins_chamfer_loss
-        )
+#         # combined loss
+#         loss = (
+#             self.w_l2 * l2_loss
+#             + self.w_silog * silog_loss
+#             + self.w_bins * bins_chamfer_loss
+#         )
 
-        # loss in areas of no ground truth
-        if (mask is not None) and (self.w_masked < 1.0):
+#         # loss in areas of no ground truth
+#         if (mask is not None) and (self.w_masked < 1.0):
 
-            invalid_silog_loss = self.silog_loss(invalid_prediction, invalid_target)
-            invalid_l2_loss = self.l2_loss(invalid_prediction, invalid_target)
-            invalid_loss = (
-                self.w_l2 * invalid_l2_loss + self.w_silog * invalid_silog_loss
-            )
+#             invalid_silog_loss = self.silog_loss(invalid_prediction, invalid_target)
+#             invalid_l2_loss = self.l2_loss(invalid_prediction, invalid_target)
+#             invalid_loss = (
+#                 self.w_l2 * invalid_l2_loss + self.w_silog * invalid_silog_loss
+#             )
 
-            loss = self.w_masked * loss + (1.0 - self.w_masked) * invalid_loss
+#             loss = self.w_masked * loss + (1.0 - self.w_masked) * invalid_loss
 
-        return loss
+#         return loss
 
 
 class SILogLoss(nn.Module):

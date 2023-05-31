@@ -138,7 +138,10 @@ def get_depth_prior_from_ground_truth(
 
     # probability model:
     # convert pixel distance to signal strength
-    signal_strength_maps = get_signal_maps(distance_maps, mu=mu, std=std, device=device)
+    # signal_strength_maps = get_signal_maps(distance_maps, mu=mu, std=std, device=device)
+
+    # distance model:
+    signal_strength_maps = distance_maps
 
     # parametrization
     parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW
@@ -172,11 +175,13 @@ def get_depth_prior_from_features(
         mask = features[i, :, 2] > 0.0
 
         if not mask.any():
-            print(
-                "WARNING: Img has no features, using zeros placeholder as parametrization!"
-            )
+            max_dist = torch.sqrt(torch.pow(height, 2) + torch.pow(width, 2))
             prior_maps[i, ...] = 0.0
-            distance_maps[i, ...] = 1e10
+            distance_maps[i, ...] = max_dist
+            print(
+                "WARNING: Img has no valid features (depth > 0.0), using "
+                + f"placeholder as parametrization (mosaic=0.0, dist={max_dist})."
+            )
             continue
 
         # get list of indices and depth values
@@ -188,14 +193,8 @@ def get_depth_prior_from_features(
         sample_dist_maps = get_distance_maps(
             height, width, idcs_height, idcs_width, device=features.device
         )
-        # try:
         # find min and argmin
         dist_map_min, dist_argmin = torch.min(sample_dist_maps, dim=0, keepdim=True)
-        # except IndexError:
-        #     print(f"idcs_height: {idcs_height}")
-        #     print(f"idcs_width: {idcs_width}")
-        #     print(f"depth_values: {depth_values}")
-        #     print(f"features[i]: {features[i]}")
 
         # nearest neighbor prior map
         prior_map = depth_values[dist_argmin]  # 1xHxW
@@ -206,9 +205,12 @@ def get_depth_prior_from_features(
 
     # probability model:
     # convert pixel distance to signal strength
-    signal_strength_maps = get_signal_maps(
-        distance_maps, mu=mu, std=std, device=features.device
-    )
+    # signal_strength_maps = get_signal_maps(
+    #     distance_maps, mu=mu, std=std, device=features.device
+    # )
+
+    # distance model:
+    signal_strength_maps = distance_maps
 
     # parametrization
     parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW
