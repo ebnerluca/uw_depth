@@ -1,10 +1,12 @@
 import torch
+
 from torch.distributions.normal import Normal
+from torch.distributions.exponential import Exponential
 
 
 def get_distance_maps(height, width, idcs_height, idcs_width, device="cpu"):
     """Returns a SxHxW tensor that captures the euclidean pixel distance to S
-    sample pixels S (h,w) in the tensor."""
+    sample pixels with coordinates (h,w)."""
 
     dist_maps = torch.empty(0, height, width).to(device)
     for idx_height, idx_width in zip(idcs_height, idcs_width):
@@ -27,20 +29,26 @@ def get_distance_maps(height, width, idcs_height, idcs_width, device="cpu"):
     return dist_maps
 
 
-def get_signal_maps(dist_map, mu=0.0, std=1.0, device="cpu"):
-    """Takes a Nx1xHxW distance map as input and outputs a signal strength map.
-    Points with small distance value correspond to great signal strength and vice versa."""
+def get_probability_maps(dist_map):
+    """Takes a Nx1xHxW distance map as input and outputs a probability map.
+    Pixels with small distance to closes feature have big probability and vice versa."""
 
-    # signal distribution model
-    distribution = Normal(loc=mu, scale=std)
+    # normal distribution
+    distribution = Normal(loc=0.0, scale=10.0)
     scale = torch.exp(
-        distribution.log_prob(torch.zeros(1, device=device))
-    )  # used to enfore signal=1 at dist=0
+        distribution.log_prob(torch.zeros(1, device=dist_map.device))
+    )  # used to enfore prob=1 at dist=0
 
-    # compute signal strength for every pixel
-    signal_map = torch.exp(distribution.log_prob(dist_map)) / scale
+    #  prior probability for every pixel
+    prob_map = torch.exp(distribution.log_prob(dist_map)) / scale
 
-    return signal_map
+    # exponential distribution
+    # r = 0.05  # rate
+    # prob_map = torch.exp(
+    #     -r * dist_map
+    # )  # dont multiply with r to have prior=1 at dist=0
+
+    return prob_map
 
 
 def get_depth_prior_from_ground_truth(
@@ -118,17 +126,6 @@ def get_depth_prior_from_ground_truth(
         # nearest neighbor prior map
         prior_map = depth_values[dist_argmin]  # 1xHxW
 
-        # linear distance model:
-        # normalize and invert prior map (close points should have strong signals)
-        # signal_strength_map = 1.0 - (dist_map_min / dist_map_min.max())
-
-        # # normalize the depth prior values to [0,1]
-        # if normalize:
-        #     eps = 1e-10  # avoid zero division if max == min (e.g. only one sample)
-        #     min = prior_map.min()
-        #     max = prior_map.max()
-        #     prior_map = (prior_map - min) / (max - min + eps)
-
         # concat
         prior_maps[i, ...] = prior_map
         distance_maps[i, ...] = dist_map_min
@@ -137,11 +134,10 @@ def get_depth_prior_from_ground_truth(
         features[i, :, 2] = depth_values
 
     # probability model:
-    # convert pixel distance to signal strength
-    # signal_strength_maps = get_signal_maps(distance_maps, mu=mu, std=std, device=device)
-
-    # distance model:
-    signal_strength_maps = distance_maps
+    # convert pixel distance to probability
+    signal_strength_maps = get_probability_maps(
+        distance_maps, mu=mu, std=std, device=device
+    )
 
     # parametrization
     parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW
@@ -153,8 +149,6 @@ def get_depth_prior_from_features(
     features,
     height=240,
     width=320,
-    mu=0.0,
-    std=1.0,
 ):
     """Takes lists of pixel indices and their respective depth probes and
     returns a depth prior parametrization."""
@@ -190,6 +184,7 @@ def get_depth_prior_from_features(
         depth_values = features[i, mask, 2]
 
         # get n_samples x height x width dist maps
+        # (needs quite a bit of memory but is faster than iterating over every pixel)
         sample_dist_maps = get_distance_maps(
             height, width, idcs_height, idcs_width, device=features.device
         )
@@ -204,16 +199,11 @@ def get_depth_prior_from_features(
         distance_maps[i, ...] = dist_map_min
 
     # probability model:
-    # convert pixel distance to signal strength
-    # signal_strength_maps = get_signal_maps(
-    #     distance_maps, mu=mu, std=std, device=features.device
-    # )
-
-    # distance model:
-    signal_strength_maps = distance_maps
+    # convert pixel distance to probability
+    prior_probability_maps = get_probability_maps(distance_maps)
 
     # parametrization
-    parametrization = torch.cat((prior_maps, signal_strength_maps), dim=1)  # Nx2xHxW
+    parametrization = torch.cat((prior_maps, prior_probability_maps), dim=1)  # Nx2xHxW
 
     return parametrization
 

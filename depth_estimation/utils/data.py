@@ -110,8 +110,6 @@ class InputTargetDataset:
                 features=depth_samples.unsqueeze(0),  # add batch dimension
                 height=240,
                 width=320,
-                mu=0.0,
-                std=10.0,
             ).squeeze(
                 0
             )  # remove batch dimension

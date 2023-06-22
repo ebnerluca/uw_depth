@@ -83,7 +83,7 @@ class Decoder(nn.Module):
         skip5 = features[18]  # size 320 x 15 x 20
         out = features[19]  # size 1280 x 15 x 20
 
-        # convolve input to match decoder channnels
+        # convolve input to match decoder channnels c_in -> c
         out = self.conv1x1(out)  # size c x 15 x 20
 
         # upsample together with skip connections and depth prior
@@ -92,7 +92,7 @@ class Decoder(nn.Module):
         out = self.up2(out, skip3, depth_prior)  # size c//4 x 30 x 40
         out = self.up3(out, skip2, depth_prior)  # size c//8 x 30 x 40
         out = self.up4(out, skip1, depth_prior)  # size c//8 x 120 x 160
-        out = self.up5(out, skip0, depth_prior)  # size c//16 x 240 x 320
+        out = self.up5(out, skip0, depth_prior)  # size c_out x 240 x 320
 
         # final convolution to achieve single channel
         if self.single_channel_output:

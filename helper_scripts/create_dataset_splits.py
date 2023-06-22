@@ -10,12 +10,14 @@ import pandas as pd
 import random
 
 ###### CONFIG
-location = "u_canyon"
-images_folder = f"/home/auv/FLSea/archive/canyons/{location}/{location}/imgs"
+location = "sub_pier"
+images_folder = f"/home/auv/FLSea/archive/red_sea/{location}/{location}/imgs"
 ground_truth_depth_folder = (
-    f"/home/auv/FLSea/archive/canyons/{location}/{location}/depth"
+    f"/home/auv/FLSea/archive/red_sea/{location}/{location}/depth"
 )
-features_folder = join(images_folder, "features")  # precomputed depth features, if any
+features_folder = join(
+    images_folder, "matched_features"
+)  # precomputed depth features, if any
 images_pattern = ".tiff"
 ground_truth_depth_pattern = "_SeaErra_abs_depth.tif"
 features_pattern = "_features.csv"
@@ -25,7 +27,7 @@ split_sizes = [
     # 0.0,
 ]  # train, validation, test percentage: Must add up to 1.
 split_names = [
-    "dataset_with_features",
+    "dataset_with_matched_features",
     # "tmp",
     # "tmp",
 ]

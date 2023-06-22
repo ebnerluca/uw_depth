@@ -105,6 +105,9 @@ class L2Loss(nn.Module):
         self.name = "L2Loss"
 
         # l2 loss is sqrt of mse loss
+        # (to be strictly correct, the L2 norm does not use mean, its just the squared error.
+        # This loss functions is actually RMSELoss, not L2 loss. The difference is
+        # just the constant factor 1/N used to form the mean)
         self.mse_loss = nn.MSELoss()
 
     def forward(self, prediction, target, mask=None):

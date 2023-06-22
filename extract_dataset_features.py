@@ -1,6 +1,6 @@
 # This file goes through all the input rgb images in a dataset
-# and extracts feature points. These feature points are then used to
-# sample the set of sparse priors
+# and extracts matched feature points. For the depth value of the
+# feature points, the ground truth value from the dataset is used.
 
 import cv2
 import numpy as np
@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 
 from os.path import splitext, join, basename, dirname, exists
 from os import mkdir
-import csv
 
 from datasets.datasets import get_flsea_dataset  # , get_usod10k_dataset
 
@@ -21,9 +20,9 @@ from datasets.datasets import get_flsea_dataset  # , get_usod10k_dataset
 n_rows, n_cols = 4, 4
 
 # n features
-n_keypoints_matching = 1000  # num  keypoints for every image for matching
+n_keypoints_matching = 200  # num  keypoints for every image for matching
 n_keypoints_direct = 400  # num keypoints (direct sampling without matching)
-n_keypoints_min = 200  # min keypoints for depth samples
+n_keypoints_min = 0  # min keypoints for depth samples
 
 # output shapes
 in_height = 480
@@ -54,6 +53,7 @@ print(f"{n_keypoints_matching} keypoints per img, devided in {n_rows}x{n_cols} c
 
 
 def debug_draw_keypoints(img, points, color=(0, 255, 0)):
+    """img: cv2 img, points: list of points with (row, col) each."""
 
     # iterate over points
     for point in points.astype(np.int):
@@ -85,6 +85,8 @@ def debug_draw_lines(img1, img2, lines, pts, pts_prev):
 
 
 def get_keypoints_and_descriptors(img, n_rows, n_cols, n_keypoints):
+    """Extract keypoints and descriptors. Img is divided into n_rows x n_cols patches,
+    features are extracted for every patch separately to have features more uniform across the img."""
 
     height, width, _ = img.shape
     n_keypoints_patch = int(n_keypoints / (n_rows * n_cols))
@@ -146,14 +148,14 @@ def get_keypoints_and_descriptors(img, n_rows, n_cols, n_keypoints):
 # brute force matcher
 bf_matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
 
-
 # for all imgs
 n_tuples = len(path_tuples)
 i = 0
 prev_keypoints = None
 prev_descriptors = None
 prev_img = None
-dmin = 10.0
+
+# main loop
 for path_tuple in path_tuples:
 
     # paths
@@ -209,13 +211,18 @@ for path_tuple in path_tuples:
 
         # filter matches with epipolar constraints
         F, mask = cv2.findFundamentalMat(pts_xy, pts_prev_xy, cv2.FM_LMEDS)
+        pts_xy_outlier = pts_xy[mask.ravel() == 0]
+        pts_prev_xy_outlier = pts_prev_xy[mask.ravel() == 0]
         pts_xy = pts_xy[mask.ravel() == 1]
         pts_prev_xy = pts_prev_xy[mask.ravel() == 1]
 
         # convert to row x column standard
         pts = np.flip(pts_xy, axis=1)
         pts_prev = np.flip(pts_prev_xy, axis=1)
+        pts_outlier = np.flip(pts_xy_outlier, axis=1)
+        pts_prev_outlier = np.flip(pts_prev_xy_outlier, axis=1)
 
+        # if there are too few matches just use detected features without matching
         if len(pts) < n_keypoints_min:
             print(
                 f"WARNING: img {rgb_path} has {len(pts)} < {n_keypoints_min} features."
@@ -248,22 +255,19 @@ for path_tuple in path_tuples:
     valid_mask = row_col_depth[:, 2] > 0.0
     row_col_depth = row_col_depth[valid_mask, :]
 
-    if len(row_col_depth) > 0:
-        min = row_col_depth[:, 2].min()
-        if min < dmin:  ## debug
-            dmin = min
-
     # write output file
-    if not exists(out_dir):
-        mkdir(out_dir)
-    pd.DataFrame(row_col_depth).to_csv(
-        out_path, header=["row", "column", "depth"], index=None
-    )
+    if not debug:
+        if not exists(out_dir):
+            mkdir(out_dir)
+        pd.DataFrame(row_col_depth).to_csv(
+            out_path, header=["row", "column", "depth"], index=None
+        )
 
     if i % 50 == 0:
         print(f"processed {i}/{n_tuples}: {len(row_col_depth)} priors")
     i += 1
 
+    # debug prints, plots, and outputs
     if debug:
 
         # print number of priors
@@ -308,16 +312,114 @@ for path_tuple in path_tuples:
         # draw matches and epipolar
         if prev_keypoints is not None:
 
-            lines1 = cv2.computeCorrespondEpilines(pts_prev_xy.reshape(-1, 1, 2), 2, F)
-            lines2 = cv2.computeCorrespondEpilines(pts_xy.reshape(-1, 1, 2), 1, F)
-            lines1 = lines1.reshape(-1, 3)
-            lines2 = lines2.reshape(-1, 3)
-            img1 = img_epi.copy()
-            img2 = prev_img.copy()
-            img1, img2 = debug_draw_lines(img1, img2, lines1, pts_xy, pts_prev_xy)
-            img2, img1 = debug_draw_lines(img2, img1, lines2, pts_prev_xy, pts_xy)
-            cv2.imshow("epipolar lines, current img", img1)
-            cv2.imshow("epipolar lines, previous img", img2)
+            match_color = (0, 255, 255)
+
+            img_kp_raw = img.copy()
+            img_prev_kp_raw = prev_img.copy()
+            img_kp_epifilt = img.copy()
+            img_kp_prev_epifilt = prev_img.copy()
+
+            # draw raw kp
+            img_kp_raw = cv2.drawKeypoints(
+                img_kp_raw, keypoints, img_kp_raw, color=match_color
+            )
+            img_prev_kp_raw = cv2.drawKeypoints(
+                img_prev_kp_raw, prev_keypoints, img_prev_kp_raw, color=match_color
+            )
+
+            # draw bf matches
+            img_matches = cv2.drawMatches(
+                img,
+                keypoints,
+                prev_img,
+                prev_keypoints,
+                matches,
+                None,
+                matchColor=match_color,
+                flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+            )
+
+            # draw filtered bf matches
+            img_kp_epifilt = debug_draw_keypoints(
+                img_kp_epifilt, pts, color=(0, 255, 0)
+            )
+            img_kp_prev_epifilt = debug_draw_keypoints(
+                img_kp_prev_epifilt, pts_prev, color=(0, 255, 0)
+            )
+
+            good_matches = np.array(matches)[mask.flatten().astype(np.bool).tolist()]
+            img_matches_filtered = cv2.drawMatches(
+                img,
+                keypoints,
+                prev_img,
+                prev_keypoints,
+                good_matches,
+                None,
+                matchColor=match_color,
+                flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+            )
+            img_matches_filtered_marked = cv2.drawMatches(
+                img_kp_epifilt,
+                keypoints,
+                img_kp_prev_epifilt,
+                prev_keypoints,
+                good_matches,
+                None,
+                matchColor=match_color,
+                flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+            )
+
+            cv2.imshow("img", img)
+            cv2.imshow("prev_img", prev_img)
+            cv2.imshow("img kp raw", img_kp_raw)
+            cv2.imshow("img prev kp raw", img_prev_kp_raw)
+            cv2.imshow("matches", img_matches)
+            cv2.imshow("matches_filtered", img_matches_filtered)
+            cv2.imshow("matches_filtered_marked", img_matches_filtered_marked)
+            cv2.imwrite("img.png", img)
+            cv2.imwrite("img_prev.png", prev_img)
+            cv2.imwrite("img_kp_raw.png", img_kp_raw)
+            cv2.imwrite("prev_img_kp_raw.png", img_prev_kp_raw)
+            cv2.imwrite("matches.png", img_matches)
+            cv2.imwrite("matches_filt.png", img_matches_filtered)
+            cv2.imwrite("matches_filt_marked.png", img_matches_filtered_marked)
+
+            # lines1 = cv2.computeCorrespondEpilines(pts_prev_xy.reshape(-1, 1, 2), 2, F)
+            # lines2 = cv2.computeCorrespondEpilines(pts_xy.reshape(-1, 1, 2), 1, F)
+            # lines1 = lines1.reshape(-1, 3)
+            # lines2 = lines2.reshape(-1, 3)
+            # img1 = img_epi.copy()
+            # img2 = prev_img.copy()
+            # img1, img2 = debug_draw_lines(img1, img2, lines1, pts_xy, pts_prev_xy)
+            # img2, img1 = debug_draw_lines(img2, img1, lines2, pts_prev_xy, pts_xy)
+            # cv2.imshow("epipolar lines, current img", img1)
+            # cv2.imshow("epipolar lines, previous img", img2)
+
+            # prior parametrization
+            # import torch
+            # from depth_estimation.utils.depth_prior import get_depth_prior_from_features
+            # from depth_estimation.utils.visualization import gray_to_heatmap
+            # from torchvision.utils import save_image
+
+            # features = torch.tensor(row_col_depth).unsqueeze(0)
+            # parametrization = get_depth_prior_from_features(
+            #     features, height=out_height, width=out_width
+            # )
+            # mosaic = gray_to_heatmap(parametrization[:, 0, ...])
+            # probability = gray_to_heatmap(
+            #     parametrization[:, 1, ...], colormap="inferno"
+            # )
+
+            # depth_orig = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
+            # depth_orig[depth_orig == 0] = depth_orig.max()
+            # depth_orig = cv2.resize(depth_orig, dsize=(out_width, out_height))
+            # depth_tensor = torch.from_numpy(depth_orig)[None, None, ...]
+            # print(f"shape: {depth_tensor.shape}")
+            # depth_heatmap = gray_to_heatmap(depth_tensor)
+            # save_image(mosaic, "mosaic.png")
+            # save_image(probability, "probability.png")
+            # save_image(depth_heatmap, "depth_heatmap.png")
+            # cv2.imwrite("img_features.png", img_kp)
 
         print("Waiting for key press ...")
         cv2.waitKey()
@@ -326,5 +428,4 @@ for path_tuple in path_tuples:
     prev_descriptors = descriptors
     prev_img = img.copy()
 
-print(f"dmin: {dmin}")
 print("Done.")

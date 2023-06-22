@@ -9,14 +9,12 @@ import datetime
 import os
 
 from depth_estimation.model.model import UDFNet
-
 from depth_estimation.utils.loss import (
     SILogLoss,
     L2Loss,
     ChamferDistanceLoss,
 )
 from depth_estimation.utils.visualization import get_tensorboard_grids
-
 
 from datasets.datasets import get_flsea_dataset, get_usod10k_dataset
 
@@ -27,8 +25,8 @@ from datasets.datasets import get_flsea_dataset, get_usod10k_dataset
 # training parameters
 BATCH_SIZE = 6
 LEARNING_RATE = 0.0001
-LEARNING_RATE_DECAY = 1.0
-EPOCHS = 100
+LEARNING_RATE_DECAY = 0.90
+EPOCHS = 25
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # DEVICE = "cpu"
 
@@ -46,6 +44,8 @@ TRAINING_LOSS_NAMES = [
     "training_loss/Bins Chamfer Loss",
     "training_loss/L2 Loss (RMSE)",
     "training_loss/L1 Loss (MAE)",
+    "training_loss/L2 Log Loss (RMSE log)",
+    "training_loss/L2 Loss [d<5m] (RMSE)",
 ]
 VALIDATION_LOSS_NAMES = [
     "validation_loss",
@@ -53,6 +53,8 @@ VALIDATION_LOSS_NAMES = [
     "validation_loss/Bins Chamfer Loss",
     "validation_loss/L2 Loss (RMSE)",
     "validation_loss/L1 Loss (MAE)",
+    "validation_loss/L2 Log Loss (RMSE log)",
+    "validation_loss/L2 Loss [d<5m] (RMSE)",
 ]
 
 # datasets
@@ -74,7 +76,7 @@ VALIDATION_DATASET = get_flsea_dataset(
 )
 
 # tensorboard output frequencies
-WRITE_TRAIN_IMG_EVERY_N_BATCHES = 300
+WRITE_TRAIN_IMG_EVERY_N_BATCHES = 500
 WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
 
 # torch.autograd.set_detect_anomaly(True)
@@ -166,7 +168,7 @@ def train_epoch(
 
     n_batches = len(dataloader)
 
-    training_losses = np.zeros(len(LOSS_FUNCTIONS) + 1)
+    training_losses = np.zeros(len(TRAINING_LOSS_NAMES))
     for batch_id, data in enumerate(dataloader):
 
         # move to device
@@ -174,6 +176,9 @@ def train_epoch(
         y = data[1].to(DEVICE)  # depth image
         mask = data[2].to(DEVICE)  # mask for valid values
         prior = data[3].to(DEVICE)  # precomputed features and depth values
+
+        # # nullprior
+        # prior[:, :, :, :] = 0.0
 
         # prediction
         pred, bin_edges = model(X, prior)
@@ -184,6 +189,19 @@ def train_epoch(
         batch_loss_chamfer = LOSS_FUNCTIONS["Chamfer_Loss"](y, bin_centers, mask)
         batch_loss_l2 = LOSS_FUNCTIONS["L2_Loss"](pred, y, mask)
         batch_loss_l1 = LOSS_FUNCTIONS["L1_Loss"](pred[mask], y[mask])  # , mask)
+        batch_loss_l2_log = LOSS_FUNCTIONS["L2_Loss"](
+            torch.log(pred), torch.log(y), mask
+        )
+        close_range = y[mask] < 5.0  # close range mask (less than 5m)
+        batch_loss_l2_close = LOSS_FUNCTIONS["L2_Loss"](
+            pred[mask][close_range], y[mask][close_range]
+        )
+
+        # guidance signal for points outside of mask
+        # batch_loss_silog = batch_loss_silog + 0.01 * LOSS_FUNCTIONS["SILog_Loss"](
+        #     pred, y, ~mask
+        # )
+        # batch_loss_l2 = batch_loss_l2 + 0.01 * LOSS_FUNCTIONS["L2_Loss"](pred, y, ~mask)
 
         # learning objective loss
         batch_loss = (
@@ -205,6 +223,8 @@ def train_epoch(
                 batch_loss_chamfer.item(),
                 batch_loss_l2.item(),
                 batch_loss_l1.item(),
+                batch_loss_l2_log.item(),
+                batch_loss_l2_close.item(),
             ]
         )
         training_losses += batch_losses
@@ -250,7 +270,7 @@ def validate(
 
     n_batches = len(dataloader)
 
-    validation_losses = np.zeros(len(LOSS_FUNCTIONS) + 1)
+    validation_losses = np.zeros(len(VALIDATION_LOSS_NAMES))
     for batch_id, data in enumerate(dataloader):
 
         # move to device
@@ -259,9 +279,11 @@ def validate(
         mask = data[2].to(DEVICE)  # mask for valid values
         prior = data[3].to(DEVICE)  # precomputed features and depth values
 
+        # # nullprior
+        # prior[:, :, :, :] = 0.0
+
         # prediction
         pred, bin_edges = model(X, prior)
-        pred_masked = pred[mask]
         bin_centers = 0.5 * (bin_edges[:, :-1] + bin_edges[:, 1:])
 
         # individual losses
@@ -269,6 +291,13 @@ def validate(
         batch_loss_chamfer = LOSS_FUNCTIONS["Chamfer_Loss"](y, bin_centers, mask)
         batch_loss_l2 = LOSS_FUNCTIONS["L2_Loss"](pred, y, mask)
         batch_loss_l1 = LOSS_FUNCTIONS["L1_Loss"](pred[mask], y[mask])  # , mask)
+        batch_loss_l2_log = LOSS_FUNCTIONS["L2_Loss"](
+            torch.log(pred), torch.log(y), mask
+        )
+        close_range = y[mask] < 5.0  # close range mask (less than 5m)
+        batch_loss_l2_close = LOSS_FUNCTIONS["L2_Loss"](
+            pred[mask][close_range], y[mask][close_range]
+        )
 
         # objective (for reference)
         batch_loss = (
@@ -285,6 +314,8 @@ def validate(
                 batch_loss_chamfer.item(),
                 batch_loss_l2.item(),
                 batch_loss_l1.item(),
+                batch_loss_l2_log.item(),
+                batch_loss_l2_close.item(),
             ]
         )
         validation_losses += batch_losses
