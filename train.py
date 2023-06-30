@@ -16,7 +16,8 @@ from depth_estimation.utils.loss import (
 )
 from depth_estimation.utils.visualization import get_tensorboard_grids
 
-from datasets.datasets import get_flsea_dataset, get_ycb_dataset, get_usod10k_dataset
+# from datasets.datasets import get_flsea_dataset, get_ycb_dataset, get_usod10k_dataset
+from data.flsea.dataset import get_flsea_dataset
 
 ##########################################
 ################# CONFIG #################
@@ -60,34 +61,34 @@ VALIDATION_LOSS_NAMES = [
 # datasets
 # TRAIN_DATASET = get_usod10k_dataset(DEVICE, split="train", train=True)
 # VALIDATION_DATASET = get_usod10k_dataset(DEVICE, split="validation", train=False)
-# TRAIN_DATASET = get_flsea_dataset(
+TRAIN_DATASET = get_flsea_dataset(
+    # DEVICE,
+    split="dataset_with_matched_features",
+    train=True,
+    # use_csv_samples=True,
+    shuffle=True,
+)
+VALIDATION_DATASET = get_flsea_dataset(
+    # DEVICE,
+    split="test_with_matched_features",
+    train=False,
+    # use_csv_samples=True,
+    shuffle=True,
+)
+# TRAIN_DATASET = get_ycb_dataset(
 #     DEVICE,
-#     split="dataset_with_matched_features",
+#     split="train",
 #     train=True,
 #     use_csv_samples=True,
 #     shuffle=True,
 # )
-# VALIDATION_DATASET = get_flsea_dataset(
+# VALIDATION_DATASET = get_ycb_dataset(
 #     DEVICE,
-#     split="test_with_matched_features",
+#     split="val",
 #     train=False,
 #     use_csv_samples=True,
 #     shuffle=True,
 # )
-TRAIN_DATASET = get_ycb_dataset(
-    DEVICE,
-    split="train",
-    train=True,
-    use_csv_samples=True,
-    shuffle=True,
-)
-VALIDATION_DATASET = get_ycb_dataset(
-    DEVICE,
-    split="val",
-    train=False,
-    use_csv_samples=True,
-    shuffle=True,
-)
 
 
 # tensorboard output frequencies
