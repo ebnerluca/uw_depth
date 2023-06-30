@@ -10,10 +10,15 @@ import matplotlib.pyplot as plt
 from os.path import splitext, join, basename, dirname, exists
 from os import mkdir
 
-from datasets.datasets import (
-    get_flsea_dataset,
-    get_ycb_dataset,
-)  # , get_usod10k_dataset
+import sys, os
+
+sys.path.append(os.getcwd())  # add cwd to path to find other pkgs
+
+# from datasets.datasets import (
+#     get_flsea_dataset,
+#     get_ycb_dataset,
+# )  # , get_usod10k_dataset
+from data.example_dataset.dataset import get_example_dataset
 
 ##########################################
 ################# CONFIG #################
@@ -35,7 +40,8 @@ out_width = 320
 
 # get img paths
 # dataset = get_flsea_dataset(split="dataset_with_matched_features", shuffle=False)
-dataset = get_ycb_dataset(split="val", shuffle=False)
+# dataset = get_ycb_dataset(split="val", shuffle=False)
+dataset = get_example_dataset(shuffle=False)
 path_tuples = dataset.path_tuples
 
 # output
@@ -171,11 +177,7 @@ for path_tuple in path_tuples:
 
     # read imgs
     img = cv2.imread(rgb_path)  # , cv2.IMREAD_GRAYSCALE)
-    depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)  # flsea
-    depth = (
-        cv2.imread(depth_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 10000.0
-    )  # factor for ycb
-
+    depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
     # resize imgs
     img = cv2.resize(img, dsize=(in_width, in_height))
     depth = cv2.resize(
