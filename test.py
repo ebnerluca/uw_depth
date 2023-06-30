@@ -8,14 +8,18 @@ from torch.utils.data import DataLoader
 
 from depth_estimation.model.model import UDFNet
 from depth_estimation.utils.loss import RMSELoss, SILogLoss, MARELoss
-from datasets.datasets import get_flsea_dataset, get_ycb_dataset
+
+# from datasets.datasets import get_flsea_dataset, get_ycb_dataset
+from data.example_dataset.dataset import get_example_dataset
 
 
 BATCH_SIZE = 8
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu"
 # MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/experiments/benchmark2/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
 # MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/experiments/no_prior/saved_models/model_e12_udfnet_lr0.0001_bs6_lrd0.95.pth"
-MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/ycb/no_prior/saved_models/model_e2_udfnet_lr0.0001_bs6_lrd0.6.pth"
+# MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/ycb/no_prior/saved_models/model_e2_udfnet_lr0.0001_bs6_lrd0.6.pth"
+MODEL_PATH = "data/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
 
 # DATASET = get_flsea_dataset(
 #     device=DEVICE,
@@ -24,13 +28,14 @@ MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/ycb/
 #     use_csv_samples=True,
 #     shuffle=False,
 # )
-DATASET = get_ycb_dataset(
-    device=DEVICE,
-    split="val",
-    train=False,
-    use_csv_samples=True,
-    shuffle=False,
-)
+# DATASET = get_ycb_dataset(
+#     device=DEVICE,
+#     split="val",
+#     train=False,
+#     use_csv_samples=True,
+#     shuffle=False,
+# )
+DATASET = get_example_dataset(train=False, shuffle=True)
 
 
 # losses
@@ -124,8 +129,8 @@ def test():
         print(f"MARE: {np.nanmedian(mare_losses[i])}")
         print("\n===\n")
 
-    print(f"dmax mean: {np.mean(dmax)}")
-    print(f"dmax median: {np.median(dmax)}")
+    print(f"max_depth mean: {np.mean(dmax)}")
+    print(f"max_depth median: {np.median(dmax)}")
 
 
 if __name__ == "__main__":
