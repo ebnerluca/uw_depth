@@ -1,15 +1,15 @@
 import torch
-
-# from torch.distributions.normal import Normal
 from torchvision.transforms.functional import hflip, vflip
+from PIL import Image
+
 import numpy as np
 
-from PIL import Image
 import csv
 import pandas as pd
 
 import random
 from os.path import exists
+from glob import glob
 
 from .depth_prior import get_depth_prior_from_features
 
@@ -26,45 +26,49 @@ class InputTargetDataset:
 
     def __init__(
         self,
-        path_tuples_csv_files,
+        # path_tuples_csv_files,
+        rgb_depth_priors_tuples,
         input_transform,
         target_transform,
         all_transform=None,
-        shuffle=False,
-        use_csv_samples=False,
+        # use_csv_samples=False,
         target_samples_transform=None,
-        max_samples=200,
+        max_priors=200,
+        shuffle=False,
     ) -> None:
+
+        # file paths
+        self.path_tuples = rgb_depth_priors_tuples
 
         # transforms applied to input and target
         self.input_transform = input_transform
         self.target_transform = target_transform
         self.all_transform = all_transform
 
-        # load tuples
-        self.path_tuples = []
-        for csv_file in path_tuples_csv_files:
-            try:
-                lines = csv.reader(open(csv_file).read().splitlines())
-                self.path_tuples += [i for i in lines]
-            except FileNotFoundError:
-                print(f"{csv_file} not found, skipping...")
+        # # load tuples
+        # self.path_tuples = []
+        # for csv_file in path_tuples_csv_files:
+        #     try:
+        #         lines = csv.reader(open(csv_file).read().splitlines())
+        #         self.path_tuples += [i for i in lines]
+        #     except FileNotFoundError:
+        #         print(f"{csv_file} not found, skipping...")
 
         # random shuffle tuples
         if shuffle:
             random.shuffle(self.path_tuples)
 
         # depth_samples
-        self.use_csv_samples = use_csv_samples
+        # self.use_csv_samples = use_csv_samples
         self.target_samples_transform = target_samples_transform
-        self.max_samples = max_samples
+        self.max_priors = max_priors
 
         # checking dataset for missing files
         if not self.check_dataset():
-            print("ERROR, corrupted dataset (missing files). Triggering exit(1).")
-            exit(1)
+            print("WARNING, dataset has missing files!")
+            # exit(1)
 
-        print(f"Dataset with {len(self)} pairs.")
+        print(f"Dataset with {len(self)} tuples.")
 
     def __len__(self):
         return len(self.path_tuples)
@@ -74,6 +78,7 @@ class InputTargetDataset:
         # get filenames
         input_fn = self.path_tuples[idx][0]
         target_fn = self.path_tuples[idx][1]
+        depth_samples_fn = self.path_tuples[idx][2]
 
         # read imgs
         input_img = Image.open(input_fn).resize((640, 480))
@@ -83,6 +88,7 @@ class InputTargetDataset:
         input_img = self.input_transform(input_img)
         target_img, mask = self.target_transform(target_img)
 
+        # check if depth map has at least one valid value
         if not mask.any():
             print(
                 f"File {target_fn} has no valid depth values, trying other image as substitution ..."
@@ -90,40 +96,64 @@ class InputTargetDataset:
             random_idx = np.random.randint(0, len(self))
             return self[random_idx]  # recursion
 
-        # read features
-        if self.use_csv_samples:
+        # read sparse depth priors
+        depth_samples = self.read_features(
+            depth_samples_fn
+        )  # , device=target_img.device)
 
-            # read depth samples file
-            depth_samples_fn = self.path_tuples[idx][2]
-            depth_samples = self.read_features(
-                depth_samples_fn, device=target_img.device
+        # check if features has at least one entry
+        if depth_samples is None:
+            print("Depth priors is None, trying other image as substitution ...")
+            random_idx = np.random.randint(0, len(self))
+            return self[random_idx]  # recursion
+
+        # get dense parametrization from sparse priors
+        parametrization = get_depth_prior_from_features(
+            features=depth_samples.unsqueeze(0),  # add batch dimension
+            height=240,
+            width=320,
+        ).squeeze(0)
+
+        # apply target + prior transform
+        if self.target_samples_transform is not None:
+            target_img, parametrization = self.target_samples_transform(
+                [target_img, parametrization]
             )
 
-            # check if zero valid depths
-            if depth_samples is None:
-                print("Depth samples is None, trying other image as substitution ...")
-                random_idx = np.random.randint(0, len(self))
-                return self[random_idx]  # recursion
+        # read features
+        # if self.use_csv_samples:
 
-            # get parametrization imgs 2x240x320
-            parametrization = get_depth_prior_from_features(
-                features=depth_samples.unsqueeze(0),  # add batch dimension
-                height=240,
-                width=320,
-            ).squeeze(
-                0
-            )  # remove batch dimension
+        #     # read depth samples file
+        #     # depth_samples_fn = self.path_tuples[idx][2]
+        #     depth_samples = self.read_features(
+        #         depth_samples_fn, device=target_img.device
+        #     )
 
-            # apply transform to target and samples
-            if self.target_samples_transform is not None:
-                target_img, parametrization = self.target_samples_transform(
-                    [target_img, parametrization]
-                )
+        #     # check if zero valid depths
+        #     if depth_samples is None:
+        #         print("Depth samples is None, trying other image as substitution ...")
+        #         random_idx = np.random.randint(0, len(self))
+        #         return self[random_idx]  # recursion
+
+        #     # get parametrization imgs 2x240x320
+        #     parametrization = get_depth_prior_from_features(
+        #         features=depth_samples.unsqueeze(0),  # add batch dimension
+        #         height=240,
+        #         width=320,
+        #     ).squeeze(
+        #         0
+        #     )  # remove batch dimension
+
+        #     # apply transform to target and samples
+        #     if self.target_samples_transform is not None:
+        #         target_img, parametrization = self.target_samples_transform(
+        #             [target_img, parametrization]
+        #         )
 
         # list of all output tensors
-        tensor_list = [input_img, target_img, mask]
-        if self.use_csv_samples:
-            tensor_list.append(parametrization)
+        tensor_list = [input_img, target_img, mask, parametrization]
+        # if self.use_csv_samples:
+        # tensor_list.append(parametrization)
 
         # apply mutual transforms
         if self.all_transform is not None:
@@ -135,27 +165,31 @@ class InputTargetDataset:
     def check_dataset(self):
         """Checks dataset for missing files."""
         for tuple in self.path_tuples:
-            if (not exists(tuple[0])) or (not exists(tuple[1])):
-                print(f"Missing files! {tuple} is missing.")
-                return False
-
-            # check depth samples
-            if self.use_csv_samples:
-                try:
-                    if not exists(tuple[2]):
-                        print(f"Missing files! {tuple} is missing.")
-                        return False
-                except IndexError:
-                    print(
-                        f"Specified use_csv_samples, but path_tuples csv file doesnt list any! tuple: {tuple}"
-                    )
+            for f in tuple:
+                if not exists(f):
+                    print(f"Missing file: {f}.")
                     return False
+            # if (not exists(tuple[0])) or (not exists(tuple[1])):
+            #     print(f"Missing img or depth! {tuple} is missing.")
+            #     return False
+
+            # # check depth samples
+            # if self.use_csv_samples:
+            #     try:
+            #         if not exists(tuple[2]):
+            #             print(f"Missing features! {tuple} is missing.")
+            #             return False
+            #     except IndexError:
+            #         print(
+            #             f"Specified use_csv_samples, but path_tuples csv file doesnt list any! tuple: {tuple}"
+            #         )
+            #         return False
 
         print(f"Checked {len(self.path_tuples)} tuples for existence, all ok.")
 
         return True
 
-    def read_features(self, path, device="cpu"):
+    def read_features(self, path):  # , device="cpu"):
 
         # load samples (might be less than n_samples)
         depth_samples_data = pd.read_csv(path).to_numpy()  # [: self.max_samples]
@@ -166,12 +200,12 @@ class InputTargetDataset:
             return None
         else:
             rand_idcs = np.random.permutation(len(depth_samples_data))[
-                : self.max_samples
+                : self.max_priors
             ]
             depth_samples = depth_samples_data[rand_idcs]
 
         # tensor from numpy
-        depth_samples = torch.from_numpy(depth_samples).to(device)
+        depth_samples = torch.from_numpy(depth_samples)  # .to(device)
 
         return depth_samples
 
