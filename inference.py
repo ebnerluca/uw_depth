@@ -9,25 +9,25 @@ from torchvision.transforms import Resize
 
 from depth_estimation.model.model import UDFNet
 from depth_estimation.utils.visualization import gray_to_heatmap
-from datasets.datasets import get_flsea_dataset
+
+# from datasets.datasets import get_flsea_dataset
+from data.example_dataset.dataset import get_example_dataset
 
 
 BATCH_SIZE = 6
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/experiments/benchmark2/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
-DATASET = get_flsea_dataset(
-    device=DEVICE,
-    split="test_with_matched_features",
-    train=False,
-    use_csv_samples=True,
-    shuffle=False,
-)
-OUT_PATH = "/home/auv/depth_estimation/depth_estimation/out"
-SAVE = False
-
-# clamping
-# MIN_DEPTH_VISUALIZE = 0.0  # everything beyond is set to max
-# MAX_DEPTH_VISUALIZE = 10.0  # everything beyond is set to max
+# MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/experiments/benchmark2/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
+MODEL_PATH = "data/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
+# DATASET = get_flsea_dataset(
+#     device=DEVICE,
+#     split="test_with_matched_features",
+#     train=False,
+#     use_csv_samples=True,
+#     shuffle=False,
+# )
+DATASET = get_example_dataset(train=False, shuffle=False)
+OUT_PATH = "data/out"
+SAVE = True
 
 
 @torch.no_grad()
@@ -59,27 +59,15 @@ def inference():
 
         # outputs
         start_time = time.time()
-        prediction, _ = model(rgb, prior)
+        prediction, _ = model(rgb, prior)  # prediction in metric scale
         end_time = time.time()
 
         # time per img
         time_per_img = (end_time - start_time) / rgb.size(0)
         total_time_per_image += time_per_img
 
-        # clamp
-        # close_mask = prediction < MIN_DEPTH_VISUALIZE
-        # far_away_mask = prediction > MAX_DEPTH_VISUALIZE
-        # if not close_mask.any():
-        #     prediction[:, :, -1, 0] = MIN_DEPTH_VISUALIZE  # make sure min is present
-        # else:
-        #     prediction[close_mask] = MIN_DEPTH_VISUALIZE
-        # if not far_away_mask.any():
-        #     prediction[:, :, 0, 0] = MAX_DEPTH_VISUALIZE  # make sure max is present
-        # else:
-        #     prediction[far_away_mask] = MAX_DEPTH_VISUALIZE
-
         # heatmap for visuals
-        heatmap = gray_to_heatmap(prediction).to(DEVICE)
+        heatmap = gray_to_heatmap(prediction).to(DEVICE)  # for visualization
 
         # save outputs
         if SAVE:
@@ -87,13 +75,15 @@ def inference():
             resize = Resize(rgb.size()[-2:])
             for i in range(rgb.size(0)):
                 index = batch_id * BATCH_SIZE + i
+
                 # out_rgb = join(OUT_PATH, f"{index}_rgb.png")
-                out_prediction = join(OUT_PATH, f"{index}_depth.png")
-                # out_heatmap = join(OUT_PATH, f"{index}_heatmap.png")
+                # out_prediction = join(OUT_PATH, f"{index}_depth.png")
+                out_heatmap = join(OUT_PATH, f"{index}_heatmap.png")
                 out_rgb_heatmap = join(OUT_PATH, f"{index}_rgb_heatmap.png")
+
                 # save_image(rgb[i], out_rgb)
-                save_image(prediction[i], out_prediction)
-                # save_image(heatmap[i], out_heatmap)
+                # save_image(prediction[i], out_prediction)
+                save_image(heatmap[i], out_heatmap)
                 save_image([rgb[i], resize(heatmap[i])], out_rgb_heatmap)
 
         if batch_id % 10 == 0:
