@@ -1,0 +1,12 @@
+data/example_dataset/rgb/0000.tiff,data/example_dataset/depth/0000_depth.tif,data/example_dataset/features/0000_features.csv
+data/example_dataset/rgb/0001.tiff,data/example_dataset/depth/0001_depth.tif,data/example_dataset/features/0001_features.csv
+data/example_dataset/rgb/0002.tiff,data/example_dataset/depth/0002_depth.tif,data/example_dataset/features/0002_features.csv
+data/example_dataset/rgb/0003.tiff,data/example_dataset/depth/0003_depth.tif,data/example_dataset/features/0003_features.csv
+data/example_dataset/rgb/0004.tiff,data/example_dataset/depth/0004_depth.tif,data/example_dataset/features/0004_features.csv
+data/example_dataset/rgb/0005.tiff,data/example_dataset/depth/0005_depth.tif,data/example_dataset/features/0005_features.csv
+data/example_dataset/rgb/0006.tiff,data/example_dataset/depth/0006_depth.tif,data/example_dataset/features/0006_features.csv
+data/example_dataset/rgb/0007.tiff,data/example_dataset/depth/0007_depth.tif,data/example_dataset/features/0007_features.csv
+data/example_dataset/rgb/0008.tiff,data/example_dataset/depth/0008_depth.tif,data/example_dataset/features/0008_features.csv
+data/example_dataset/rgb/0009.tiff,data/example_dataset/depth/0009_depth.tif,data/example_dataset/features/0009_features.csv
+data/example_dataset/rgb/0010.tiff,data/example_dataset/depth/0010_depth.tif,data/example_dataset/features/0010_features.csv
+data/example_dataset/rgb/0011.tiff,data/example_dataset/depth/0011_depth.tif,data/example_dataset/features/0011_features.csv
