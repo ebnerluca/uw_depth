@@ -1,7 +1,7 @@
-# this file splits the whole dataset into training and test data and
-# generates respective csv files with the names of the [imagea, ground_truth_depth] pairs
+# This file is used for two things:
+#     - filter a dataset by searching it for invalid data (e.g. empty depth maps)
+#     - generate dataset.csv files which list tuples for training: (rgb, depth, priors)
 
-import csv
 import glob
 from os.path import join, basename, exists, splitext
 import cv2
@@ -9,34 +9,36 @@ import numpy as np
 import pandas as pd
 import random
 
-###### CONFIG
-location = "0000"
-images_folder = (
-    f"/media/auv/Seagate_2TB/datasets/ycb/ycb_dataset/ycb_dataset/data/{location}/"
-)
-ground_truth_depth_folder = (
-    f"/media/auv/Seagate_2TB/datasets/ycb/ycb_dataset/ycb_dataset/data/{location}/"
-)
-features_folder = join(
-    images_folder, "matched_features"
-)  # precomputed depth features, if any
-images_pattern = "-color.png"
-ground_truth_depth_pattern = "-depth.png"
+############################################################
+###################### CONFIG ##############################
+############################################################
+
+images_folder = "data/example_dataset/rgb"
+ground_truth_depth_folder = "data/example_dataset/depth"
+features_folder = "data/example_dataset/features"
+
+# file patterns
+images_pattern = ".tiff"
+ground_truth_depth_pattern = "_depth.tif"
 features_pattern = "_features.csv"
+
+# optional: splits, should add up to 1
 split_sizes = [
     1.0,
     # 0.0,
     # 0.0,
-]  # train, validation, test percentage: Must add up to 1.
+]
 split_names = [
-    "dataset_with_matched_features",
-    # "tmp",
-    # "tmp",
+    "split_0",
+    # "split_1",
+    # "split_2",
 ]
 allow_zero = True  # allow depth imgs with pixel values zero (=invalid)
 allow_zero_range = False  # allow img range [0,0]
 
-#######
+############################################################
+############################################################
+############################################################
 
 # search candidates
 depth_candidate_paths = glob.glob(
