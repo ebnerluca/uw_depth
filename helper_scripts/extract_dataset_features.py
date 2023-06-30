@@ -10,10 +10,6 @@ import matplotlib.pyplot as plt
 from os.path import splitext, join, basename, dirname, exists
 from os import mkdir
 
-import sys, os
-
-sys.path.append(os.getcwd())  # add cwd to path to find other pkgs
-
 # from datasets.datasets import (
 #     get_flsea_dataset,
 #     get_ycb_dataset,
