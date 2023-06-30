@@ -54,7 +54,7 @@ def inference():
         rgb = data[0].to(DEVICE)  # RGB image
         prior = data[3].to(DEVICE)  # precomputed features and depth values
 
-        # # nullprior
+        # nullprior
         # prior[:, :, :, :] = 0.0
 
         # outputs

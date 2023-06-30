@@ -151,6 +151,8 @@ class InputTargetDataset:
                     )
                     return False
 
+        print(f"Checked {len(self.path_tuples)} tuples for existence, all ok.")
+
         return True
 
     def read_features(self, path, device="cpu"):
@@ -217,7 +219,7 @@ class MutualRandomVerticalFlip:
 class IntPILToTensor:
     """Converts a uint8 PIL img in range [0,255] to a torch float tensor in range [0,1]."""
 
-    def __init__(self, type="uint8", device="cpu") -> None:
+    def __init__(self, type="uint8", custom_divider=None, device="cpu") -> None:
         self.device = device
         if type == "uint8":
             self.divider = 255
@@ -225,6 +227,9 @@ class IntPILToTensor:
             self.divider = 65535
         else:
             self.divider = 1
+
+        if custom_divider is not None:
+            self.divider = custom_divider
 
     def __call__(self, img):
         # convert to np array

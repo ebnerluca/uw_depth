@@ -72,11 +72,16 @@ class SILogLoss(nn.Module):
     AdaBins (https://arxiv.org/abs/2011.14141) and\\
     UDepth (https://arxiv.org/abs/2209.12358)"""
 
-    def __init__(self, eps=1e-10) -> None:
+    def __init__(self, correction=1.0, scaling=10.0, eps=1e-10) -> None:
+        """correction: in range [0,1], where 0 results in a loss equivalent to RMSE in log space
+        and 1 results in RMSE in log space with scale invariance."""
+
         super(SILogLoss, self).__init__()
         self.name = "SILog"
 
         self.eps = eps  # avoid log(0)
+        self.correction = correction
+        self.scaling = scaling
 
     def forward(self, prediction, target, mask=None):
 
@@ -89,37 +94,15 @@ class SILogLoss(nn.Module):
         d = torch.log(prediction + self.eps) - torch.log(target + self.eps)
 
         # loss
-        loss = torch.mean(torch.pow(d, 2)) - 0.85 * torch.pow(torch.mean(d), 2)
+        loss = torch.mean(torch.pow(d, 2)) - self.correction * torch.pow(
+            torch.mean(d), 2
+        )
 
         # alternative implementation used by UDepth and AdaBins using "Bessels Correction"
         # (torch.var is using bessels correction by default, see arg "unbiased")
         # loss2 = torch.var(d) + 0.15 * torch.pow(torch.mean(d), 2)
 
-        return 10.0 * torch.sqrt(loss)
-
-
-class L2Loss(nn.Module):
-    def __init__(self) -> None:
-        super(L2Loss, self).__init__()
-
-        self.name = "L2Loss"
-
-        # l2 loss is sqrt of mse loss
-        # (to be strictly correct, the L2 norm does not use mean, its just the squared error.
-        # This loss functions is actually RMSELoss, not L2 loss. The difference is
-        # just the constant factor 1/N used to form the mean)
-        self.mse_loss = nn.MSELoss()
-
-    def forward(self, prediction, target, mask=None):
-
-        # apply mask
-        if mask is not None:
-            prediction = prediction[mask]
-            target = target[mask]
-
-        loss = torch.sqrt(self.mse_loss(prediction, target))
-
-        return loss
+        return self.scaling * torch.sqrt(loss)
 
 
 class ChamferDistanceLoss(nn.Module):
@@ -202,30 +185,68 @@ class ChamferDistanceLoss(nn.Module):
         return bidirectional_dist * 10.0
 
 
-def get_target_bins(target, n_bins=100):
-    """UNTESTED: Reduce an image by sorting all pixel values first and using only its n_bins quantiles.
-    This allows for much faster computation of e.g. the ChamferDistanceLoss, but also  loss of information.
-    Returns a sorted reduced target in format Nx1xn_binsx1"""
+class RMSELoss(nn.Module):
+    def __init__(self) -> None:
+        super(RMSELoss, self).__init__()
 
-    # # bins
-    # edges = torch.arange(n_bins + 1) / n_bins
-    # bin_centers = 0.5 * (edges[:-1] + edges[1:])
-    # bin_centers = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
+        self.name = "RMSELoss"
 
-    # sort target
-    target_sorted, _ = target.flatten(1).sort()
+        self.mse_loss = nn.MSELoss()
 
-    # find indices for reduced img
-    step = target_sorted.size(1) / n_bins
-    edges = torch.arange(n_bins + 1)  # [0, 1, ..., n]
-    bin_center_indices = 0.5 * (edges[:-1] + edges[1:]) * step
-    # bin_center_indices = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
+    def forward(self, prediction, target, mask=None):
 
-    # reduced target
-    target_bins = target_sorted[:, bin_center_indices.long()]
-    target_bins = target_bins.unsqueeze(1).unsqueeze(-1)  # channel and width dim
+        # apply mask
+        if mask is not None:
+            prediction = prediction[mask]
+            target = target[mask]
 
-    return target_bins
+        loss = torch.sqrt(self.mse_loss(prediction, target))
+
+        return loss
+
+
+class MARELoss(nn.Module):
+    def __init__(self) -> None:
+        super(MARELoss, self).__init__()
+
+        self.name = "MARELoss"
+
+    def forward(self, prediction, target, mask=None):
+
+        # apply mask
+        if mask is not None:
+            prediction = prediction[mask]
+            target = target[mask]
+
+        loss = torch.mean(torch.abs((prediction - target) / target))
+
+        return loss
+
+
+# def get_target_bins(target, n_bins=100):
+#     """UNTESTED: Reduce an image by sorting all pixel values first and using only its n_bins quantiles.
+#     This allows for much faster computation of e.g. the ChamferDistanceLoss, but also  loss of information.
+#     Returns a sorted reduced target in format Nx1xn_binsx1"""
+
+#     # # bins
+#     # edges = torch.arange(n_bins + 1) / n_bins
+#     # bin_centers = 0.5 * (edges[:-1] + edges[1:])
+#     # bin_centers = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
+
+#     # sort target
+#     target_sorted, _ = target.flatten(1).sort()
+
+#     # find indices for reduced img
+#     step = target_sorted.size(1) / n_bins
+#     edges = torch.arange(n_bins + 1)  # [0, 1, ..., n]
+#     bin_center_indices = 0.5 * (edges[:-1] + edges[1:]) * step
+#     # bin_center_indices = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
+
+#     # reduced target
+#     target_bins = target_sorted[:, bin_center_indices.long()]
+#     target_bins = target_bins.unsqueeze(1).unsqueeze(-1)  # channel and width dim
+
+#     return target_bins
 
 
 def test_chamfer():

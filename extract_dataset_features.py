@@ -10,7 +10,10 @@ import matplotlib.pyplot as plt
 from os.path import splitext, join, basename, dirname, exists
 from os import mkdir
 
-from datasets.datasets import get_flsea_dataset  # , get_usod10k_dataset
+from datasets.datasets import (
+    get_flsea_dataset,
+    get_ycb_dataset,
+)  # , get_usod10k_dataset
 
 ##########################################
 ################# CONFIG #################
@@ -20,9 +23,9 @@ from datasets.datasets import get_flsea_dataset  # , get_usod10k_dataset
 n_rows, n_cols = 4, 4
 
 # n features
-n_keypoints_matching = 200  # num  keypoints for every image for matching
+n_keypoints_matching = 1000  # num  keypoints for every image for matching
 n_keypoints_direct = 400  # num keypoints (direct sampling without matching)
-n_keypoints_min = 0  # min keypoints for depth samples
+n_keypoints_min = 200  # min keypoints for depth samples
 
 # output shapes
 in_height = 480
@@ -31,7 +34,8 @@ out_height = 240
 out_width = 320
 
 # get img paths
-dataset = get_flsea_dataset(split="dataset_with_matched_features", shuffle=False)
+# dataset = get_flsea_dataset(split="dataset_with_matched_features", shuffle=False)
+dataset = get_ycb_dataset(split="val", shuffle=False)
 path_tuples = dataset.path_tuples
 
 # output
@@ -167,7 +171,10 @@ for path_tuple in path_tuples:
 
     # read imgs
     img = cv2.imread(rgb_path)  # , cv2.IMREAD_GRAYSCALE)
-    depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
+    depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)  # flsea
+    depth = (
+        cv2.imread(depth_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 10000.0
+    )  # factor for ycb
 
     # resize imgs
     img = cv2.resize(img, dsize=(in_width, in_height))

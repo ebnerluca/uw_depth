@@ -10,16 +10,18 @@ import pandas as pd
 import random
 
 ###### CONFIG
-location = "sub_pier"
-images_folder = f"/home/auv/FLSea/archive/red_sea/{location}/{location}/imgs"
+location = "0000"
+images_folder = (
+    f"/media/auv/Seagate_2TB/datasets/ycb/ycb_dataset/ycb_dataset/data/{location}/"
+)
 ground_truth_depth_folder = (
-    f"/home/auv/FLSea/archive/red_sea/{location}/{location}/depth"
+    f"/media/auv/Seagate_2TB/datasets/ycb/ycb_dataset/ycb_dataset/data/{location}/"
 )
 features_folder = join(
     images_folder, "matched_features"
 )  # precomputed depth features, if any
-images_pattern = ".tiff"
-ground_truth_depth_pattern = "_SeaErra_abs_depth.tif"
+images_pattern = "-color.png"
+ground_truth_depth_pattern = "-depth.png"
 features_pattern = "_features.csv"
 split_sizes = [
     1.0,
@@ -70,11 +72,9 @@ for depth_candidate_path in depth_candidate_paths:
     i += 1
 print(f"Found {len(depths)} valid depth maps.")
 
-
 # shuffle
 pairs = list(zip(imgs, depths))
 random.shuffle(pairs)
-
 
 # get splits ranges
 n_pairs = len(imgs)
@@ -121,3 +121,11 @@ for i in range(n_splits):
     df.to_csv(join(images_folder, split_name + ".csv"), index=False, header=False)
 
 print("Done.")
+
+
+# if __name__ == "__main__":
+
+#     locations = 92
+#     for i in range(locations):
+#         location = f"{i:04}"
+#         main(location)
