@@ -27,10 +27,6 @@ def get_example_dataset(
     lines = csv.reader(open(index_file).read().splitlines())
     rgb_depth_priors_tuples = [i for i in lines]
 
-    print("[DEBUG]: rgb_depth_priors_tuples:")
-    for t in rgb_depth_priors_tuples:
-        print(f"[DEBUG]:    {t}")
-
     # transforms
     if train:
         input_transform = transforms.Compose(
