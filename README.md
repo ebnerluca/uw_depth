@@ -3,7 +3,7 @@ Thesis link: [Google Drive](https://drive.google.com/file/d/14l2fhPkZmZFd02KGrkm
 
 https://github.com/ebnerluca/depth_estimation/assets/48278846/24c51208-c357-4ffc-91d6-d1a83b60e995
 
-Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing)
+RGB vs. Depth Prediction (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing))
 
 ---
 
@@ -20,6 +20,7 @@ pip3 install -r dependencies.txt
 # add repo root to pythonpath
 export PYTHONPATH="$PWD:$PYTHONPATH"
 ```
+---
 
 ## Demo
 While in the repository root folder, run
