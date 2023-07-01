@@ -53,10 +53,11 @@ class CombinedUpsample(nn.Sequential):
             # depth wise concatenate additional input
             out = torch.cat([out, additional_input_interpolated], dim=1)
 
-        out = self.convA(out)  # convolution A
-        out = self.leakyreluA(out)  # relu A
-        out = self.convB(out)  # convolution B
-        out = self.leakyreluB(out)  # relu B
+        # convolutional layers and activation
+        out = self.convA(out)
+        out = self.leakyreluA(out)
+        out = self.convB(out)
+        out = self.leakyreluB(out)
 
         return out
 
@@ -74,7 +75,7 @@ class PatchTransformerEncoder(nn.Module):
             padding=0,
         )
 
-        # create 500 positional encodings as random vectors with length embedding_dim
+        # create 500 positional encodings as unique vectors with length embedding_dim
         self.positional_encodings = nn.Parameter(
             torch.rand(embedding_dim, 500), requires_grad=True
         )

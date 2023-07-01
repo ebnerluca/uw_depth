@@ -13,11 +13,7 @@ import csv
 
 
 def get_flsea_dataset(
-    # device="cpu",
-    split="dataset_with_matched_features",
-    train=False,
-    # use_csv_samples=False,
-    shuffle=False,
+    split="dataset_with_matched_features", train=False, shuffle=False, device="cpu"
 ):
 
     # define csv files for input target pairs
@@ -49,13 +45,13 @@ def get_flsea_dataset(
     if train:
         input_transform = transforms.Compose(
             [
-                IntPILToTensor(type="uint8"),  # , device=device),
+                IntPILToTensor(type="uint8", device=device),
                 transforms.ColorJitter(brightness=0.1, hue=0.05),
             ]
         )
         target_transform = transforms.Compose(
             [
-                FloatPILToTensor(),  # device=device),
+                FloatPILToTensor(device=device),
                 ReplaceInvalid(value="max"),
             ]
         )
@@ -69,28 +65,16 @@ def get_flsea_dataset(
     # if not train
     else:
         input_transform = transforms.Compose(
-            [IntPILToTensor(type="uint8")]  # , device=device),
+            [IntPILToTensor(type="uint8", device=device)]
         )
         target_transform = transforms.Compose(
             [
-                FloatPILToTensor(),  # device=device),
+                FloatPILToTensor(device=device),
                 ReplaceInvalid(value="max"),
             ]
         )
         all_transform = None
         target_samples_transform = None
-
-    # instantiate dataset
-    # dataset = InputTargetDataset(
-    #     path_tuples_csv_files=path_tuples_csv_files,
-    #     shuffle=shuffle,
-    #     input_transform=input_transform,
-    #     target_transform=target_transform,
-    #     all_transform=all_transform,
-    #     use_csv_samples=use_csv_samples,
-    #     target_samples_transform=target_samples_transform,
-    #     max_samples=200,
-    # )
 
     dataset = InputTargetDataset(
         rgb_depth_priors_tuples=rgb_depth_priors_tuples,

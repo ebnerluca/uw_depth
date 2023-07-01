@@ -16,16 +16,8 @@ from data.example_dataset.dataset import get_example_dataset
 
 BATCH_SIZE = 6
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-# MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/experiments/benchmark2/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
 MODEL_PATH = "data/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
-# DATASET = get_flsea_dataset(
-#     device=DEVICE,
-#     split="test_with_matched_features",
-#     train=False,
-#     use_csv_samples=True,
-#     shuffle=False,
-# )
-DATASET = get_example_dataset(train=False, shuffle=False)
+DATASET = get_example_dataset(train=False, shuffle=False, device=DEVICE)
 OUT_PATH = "data/out"
 SAVE = True
 

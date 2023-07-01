@@ -4,57 +4,10 @@ import numpy as np
 import torch
 from torchvision.utils import make_grid
 
-# from .utils import resize_to_smallest, resize_to_biggest, resize, normalize_img
 
-
-# def visualize_heatmaps(imgs, img_names, resolution=None):
-
-#     for img, img_name in zip(imgs, img_names):
-
-#         print(img_name)
-#         print(f"Shape: {img.shape}")
-#         print(f"Range: [{np.amin(img)}, {np.amax(img)}]")
-#         print("")
-
-#     # resize
-#     if resolution is None:
-#         imgs = resize_to_smallest(imgs)
-#     else:
-#         imgs = resize(imgs, resolution)
-
-#     # generate heatmaps
-#     heatmaps = []
-#     for img_name, img in zip(img_names, imgs):
-
-#         heatmap = get_heatmap(img)
-#         heatmaps.append(heatmap)
-
-#         # show heatmap img
-#         cv2.imshow(img_name, heatmap)
-
-#     return heatmaps
-
-
-# def visualize_depth_histogram(imgs, img_names, n_bins=100):
-#     for img, img_name in zip(imgs, img_names):
-
-#         counts, bins = np.histogram(img, bins=n_bins)
-#         fig = plt.figure(img_name)
-#         plt.hist(bins[:-1], bins, weights=counts)
-#         fig.suptitle(img_name)
-
-#     plt.show()
-
-
-# def get_heatmap(img):
-
-#     out = normalize_img(img)
-#     colormap = plt.get_cmap("inferno")
-#     out = (colormap(1.0 - out) * 255).astype(np.uint8)[:, :, :3]
-#     out = cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
-
-#     return out
 def get_bin_centers_img(bin_edges, target, mask, device="cpu"):
+    """Get visualization for usage on e.g. tensorboard which shows distribution
+    of target depths and predicted bins."""
 
     # target shapes
     n_batch = target.size(0)
@@ -124,7 +77,7 @@ def get_bin_centers_img(bin_edges, target, mask, device="cpu"):
 def gray_to_heatmap(gray, colormap="inferno_r", normalize=True, device="cpu"):
     """Takes torch tensor input of shape [Nx1HxW], returns heatmap tensor of shape [Nx3xHxW].\\
     colormap 'inferno_r': [0,1] --> [bright, dark], e.g. for depths\\
-    colormap 'inferno': [0,1] --> [dark, bright], e.g. for signals"""
+    colormap 'inferno': [0,1] --> [dark, bright], e.g. for probabilities"""
 
     # get colormap
     colormap = plt.get_cmap(colormap)
@@ -157,11 +110,8 @@ def get_tensorboard_grids(X, y, prior, pred, mask, bin_edges, device="cpu"):
     - y: ground truth depth [Nx1xHxW]
     - prior: prior parametrization [Nx2xHxW]
     - pred: prediction [Nx1xHxW]
-    - nrow: batch size
-
-    Outputs:
-    - target parametrization grid
-    - rgb vs. target vs. prediction vs. error grid
+    - mask: mask for valid depths [Nx1xHxW]
+    - bin_edges: [Nxn_bins]
     """
 
     # error

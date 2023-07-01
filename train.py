@@ -16,20 +16,19 @@ from depth_estimation.utils.loss import (
 )
 from depth_estimation.utils.visualization import get_tensorboard_grids
 
-# from datasets.datasets import get_flsea_dataset, get_ycb_dataset, get_usod10k_dataset
 from data.flsea.dataset import get_flsea_dataset
 
-##########################################
-################# CONFIG #################
-##########################################
+
+##############################################################
+########################## CONFIG ############################
+##############################################################
 
 # training parameters
 BATCH_SIZE = 6
 LEARNING_RATE = 0.0001
-LEARNING_RATE_DECAY = 0.60
+LEARNING_RATE_DECAY = 0.90
 EPOCHS = 25
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-# DEVICE = "cpu"
 
 LOSS_FUNCTIONS = {
     "SILog_Loss": SILogLoss(correction=0.85, scaling=10.0),
@@ -46,7 +45,7 @@ TRAINING_LOSS_NAMES = [
     "training_loss/L2 Loss (RMSE)",
     "training_loss/L1 Loss (MAE)",
     "training_loss/L2 Log Loss (RMSE log)",
-    "training_loss/L2 Loss [d<1m] (RMSE)",
+    "training_loss/L2 Loss [d<5m] (RMSE)",
 ]
 VALIDATION_LOSS_NAMES = [
     "validation_loss",
@@ -55,50 +54,30 @@ VALIDATION_LOSS_NAMES = [
     "validation_loss/L2 Loss (RMSE)",
     "validation_loss/L1 Loss (MAE)",
     "validation_loss/L2 Log Loss (RMSE log)",
-    "validation_loss/L2 Loss [d<1m] (RMSE)",
+    "validation_loss/L2 Loss [d<5m] (RMSE)",
 ]
 
 # datasets
-# TRAIN_DATASET = get_usod10k_dataset(DEVICE, split="train", train=True)
-# VALIDATION_DATASET = get_usod10k_dataset(DEVICE, split="validation", train=False)
 TRAIN_DATASET = get_flsea_dataset(
-    # DEVICE,
     split="dataset_with_matched_features",
     train=True,
-    # use_csv_samples=True,
     shuffle=True,
+    device=DEVICE,
 )
 VALIDATION_DATASET = get_flsea_dataset(
-    # DEVICE,
     split="test_with_matched_features",
     train=False,
-    # use_csv_samples=True,
     shuffle=True,
+    device=DEVICE,
 )
-# TRAIN_DATASET = get_ycb_dataset(
-#     DEVICE,
-#     split="train",
-#     train=True,
-#     use_csv_samples=True,
-#     shuffle=True,
-# )
-# VALIDATION_DATASET = get_ycb_dataset(
-#     DEVICE,
-#     split="val",
-#     train=False,
-#     use_csv_samples=True,
-#     shuffle=True,
-# )
-
 
 # tensorboard output frequencies
 WRITE_TRAIN_IMG_EVERY_N_BATCHES = 500
 WRITE_VALIDATION_IMG_EVERY_N_BATCHES = 300
 
-# torch.autograd.set_detect_anomaly(True)
-##########################################
-##########################################
-##########################################
+############################################################
+############################################################
+############################################################
 
 
 def train_UDFNet():
@@ -125,6 +104,7 @@ def train_UDFNet():
     train_dataloader = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE, shuffle=True)
     validation_dataloader = DataLoader(VALIDATION_DATASET, batch_size=BATCH_SIZE)
 
+    # train epochs
     for epoch in range(EPOCHS):
 
         # decayed learning rate
@@ -160,7 +140,7 @@ def train_UDFNet():
         for loss, loss_name in zip(validation_losses, VALIDATION_LOSS_NAMES):
             summary_writer.add_scalar(f"{loss_name}", loss, epoch)
 
-        # save model
+        # save model after every epoch
         save_model(model, epoch, run_name)
 
 
@@ -193,7 +173,7 @@ def train_epoch(
         mask = data[2].to(DEVICE)  # mask for valid values
         prior = data[3].to(DEVICE)  # precomputed features and depth values
 
-        # # nullprior
+        # nullprior, for training without any priors
         # prior[:, :, :, :] = 0.0
 
         # prediction
@@ -208,16 +188,16 @@ def train_epoch(
         batch_loss_l2_log = LOSS_FUNCTIONS["L2_Loss"](
             torch.log(pred), torch.log(y), mask
         )
-        close_range = y[mask] < 1.0  # close range mask (less than 5m)
+        close_range = y[mask] < 5.0  # close range mask (less than 5m)
         batch_loss_l2_close = LOSS_FUNCTIONS["L2_Loss"](
             pred[mask][close_range], y[mask][close_range]
         )
 
-        # guidance signal for points outside of mask
-        # batch_loss_silog = batch_loss_silog + 0.01 * LOSS_FUNCTIONS["SILog_Loss"](
-        #     pred, y, ~mask
-        # )
-        # batch_loss_l2 = batch_loss_l2 + 0.01 * LOSS_FUNCTIONS["L2_Loss"](pred, y, ~mask)
+        # guidance signal for points outside of mask (usually points at infinity)
+        batch_loss_silog = batch_loss_silog + 0.02 * LOSS_FUNCTIONS["SILog_Loss"](
+            pred, y, ~mask
+        )
+        batch_loss_l2 = batch_loss_l2 + 0.02 * LOSS_FUNCTIONS["L2_Loss"](pred, y, ~mask)
 
         # learning objective loss
         batch_loss = (
@@ -310,7 +290,7 @@ def validate(
         batch_loss_l2_log = LOSS_FUNCTIONS["L2_Loss"](
             torch.log(pred), torch.log(y), mask
         )
-        close_range = y[mask] < 1.0  # close range mask (less than 5m)
+        close_range = y[mask] < 5.0  # close range mask (less than 5m)
         batch_loss_l2_close = LOSS_FUNCTIONS["L2_Loss"](
             pred[mask][close_range], y[mask][close_range]
         )

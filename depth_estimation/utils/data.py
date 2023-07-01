@@ -4,34 +4,29 @@ from PIL import Image
 
 import numpy as np
 
-import csv
 import pandas as pd
-
 import random
 from os.path import exists
-from glob import glob
 
 from .depth_prior import get_depth_prior_from_features
 
 
 class InputTargetDataset:
     """Parameters:
-    - path_tuples_csv_files: List of filepaths to csv files which list image tuples (input, target (,features))
+    - rgb_depth_priors_tuples: List of filepath tuples of form (rgb, depth, sparse priors)
     - input_transform: Transform to apply to the input RGB image, returns torch Tensor
     - target_transform: Transform to apply to the target depth image, returns torch Tensor
     - all_transform: Transform to apply to both input, target and mask image (and depth samples as well), returns list of torch Tensors
     - target_samples_transform: Transfrom to apply to both target and depth samples, returns list of torch Tensors
-    - use_csv_samples: Bool to specify if depth samples should be drawn randomly or from saved csv file
-    - max_samples: max number of samples per image"""
+    - max_priors: max number of priors to subsample
+    - shuffle: shuffle dataset"""
 
     def __init__(
         self,
-        # path_tuples_csv_files,
         rgb_depth_priors_tuples,
         input_transform,
         target_transform,
         all_transform=None,
-        # use_csv_samples=False,
         target_samples_transform=None,
         max_priors=200,
         shuffle=False,
@@ -45,21 +40,11 @@ class InputTargetDataset:
         self.target_transform = target_transform
         self.all_transform = all_transform
 
-        # # load tuples
-        # self.path_tuples = []
-        # for csv_file in path_tuples_csv_files:
-        #     try:
-        #         lines = csv.reader(open(csv_file).read().splitlines())
-        #         self.path_tuples += [i for i in lines]
-        #     except FileNotFoundError:
-        #         print(f"{csv_file} not found, skipping...")
-
         # random shuffle tuples
         if shuffle:
             random.shuffle(self.path_tuples)
 
         # depth_samples
-        # self.use_csv_samples = use_csv_samples
         self.target_samples_transform = target_samples_transform
         self.max_priors = max_priors
 
@@ -97,9 +82,7 @@ class InputTargetDataset:
             return self[random_idx]  # recursion
 
         # read sparse depth priors
-        depth_samples = self.read_features(
-            depth_samples_fn
-        )  # , device=target_img.device)
+        depth_samples = self.read_features(depth_samples_fn, device=target_img.device)
 
         # check if features has at least one entry
         if depth_samples is None:
@@ -120,40 +103,8 @@ class InputTargetDataset:
                 [target_img, parametrization]
             )
 
-        # read features
-        # if self.use_csv_samples:
-
-        #     # read depth samples file
-        #     # depth_samples_fn = self.path_tuples[idx][2]
-        #     depth_samples = self.read_features(
-        #         depth_samples_fn, device=target_img.device
-        #     )
-
-        #     # check if zero valid depths
-        #     if depth_samples is None:
-        #         print("Depth samples is None, trying other image as substitution ...")
-        #         random_idx = np.random.randint(0, len(self))
-        #         return self[random_idx]  # recursion
-
-        #     # get parametrization imgs 2x240x320
-        #     parametrization = get_depth_prior_from_features(
-        #         features=depth_samples.unsqueeze(0),  # add batch dimension
-        #         height=240,
-        #         width=320,
-        #     ).squeeze(
-        #         0
-        #     )  # remove batch dimension
-
-        #     # apply transform to target and samples
-        #     if self.target_samples_transform is not None:
-        #         target_img, parametrization = self.target_samples_transform(
-        #             [target_img, parametrization]
-        #         )
-
         # list of all output tensors
         tensor_list = [input_img, target_img, mask, parametrization]
-        # if self.use_csv_samples:
-        # tensor_list.append(parametrization)
 
         # apply mutual transforms
         if self.all_transform is not None:
@@ -169,30 +120,16 @@ class InputTargetDataset:
                 if not exists(f):
                     print(f"Missing file: {f}.")
                     return False
-            # if (not exists(tuple[0])) or (not exists(tuple[1])):
-            #     print(f"Missing img or depth! {tuple} is missing.")
-            #     return False
-
-            # # check depth samples
-            # if self.use_csv_samples:
-            #     try:
-            #         if not exists(tuple[2]):
-            #             print(f"Missing features! {tuple} is missing.")
-            #             return False
-            #     except IndexError:
-            #         print(
-            #             f"Specified use_csv_samples, but path_tuples csv file doesnt list any! tuple: {tuple}"
-            #         )
-            #         return False
 
         print(f"Checked {len(self.path_tuples)} tuples for existence, all ok.")
 
         return True
 
-    def read_features(self, path):  # , device="cpu"):
+    def read_features(self, path, device="cpu"):
+        """Read sparse priors from file and store in torch tensor."""
 
         # load samples (might be less than n_samples)
-        depth_samples_data = pd.read_csv(path).to_numpy()  # [: self.max_samples]
+        depth_samples_data = pd.read_csv(path).to_numpy()
 
         # give warning when no features
         if len(depth_samples_data) == 0:
@@ -202,10 +139,10 @@ class InputTargetDataset:
             rand_idcs = np.random.permutation(len(depth_samples_data))[
                 : self.max_priors
             ]
-            depth_samples = depth_samples_data[rand_idcs]
+            depth_samples = depth_samples_data[rand_idcs]  # select subset
 
         # tensor from numpy
-        depth_samples = torch.from_numpy(depth_samples)  # .to(device)
+        depth_samples = torch.from_numpy(depth_samples).to(device)
 
         return depth_samples
 
@@ -251,10 +188,12 @@ class MutualRandomVerticalFlip:
 
 
 class IntPILToTensor:
-    """Converts a uint8 PIL img in range [0,255] to a torch float tensor in range [0,1]."""
+    """Converts an int PIL img to a torch float tensor in range [0,1]."""
 
     def __init__(self, type="uint8", custom_divider=None, device="cpu") -> None:
+
         self.device = device
+
         if type == "uint8":
             self.divider = 255
         elif type == "uint16":
@@ -263,9 +202,10 @@ class IntPILToTensor:
             self.divider = 1
 
         if custom_divider is not None:
-            self.divider = custom_divider
+            self.divider = custom_divider  # ycb-video uses 10'000 as factor
 
     def __call__(self, img):
+
         # convert to np array
         img_np = np.array(img)
 
@@ -278,17 +218,16 @@ class IntPILToTensor:
         # convert to tensor
         img_tensor = torch.from_numpy(img_np).to(self.device)
 
-        # convert to float and divide by 255
+        # convert to float and divide by set divider
         img_tensor = img_tensor.float().div(self.divider)
 
         return img_tensor
 
 
 class FloatPILToTensor:
-    """Converts a float PIL img to a 1xHxW torch tensor"""
+    """Converts a float PIL img to a torch float tensor"""
 
     def __init__(self, device="cpu"):
-
         self.device = device
 
     def __call__(self, img):
@@ -303,10 +242,12 @@ class FloatPILToTensor:
         # convert to tensor
         img_tensor = torch.from_numpy(img_np).to(self.device)
 
-        return img_tensor  # , mask
+        return img_tensor
 
 
 class MutualRandomFactor:
+    """Multiply tensors by a random factor in given range."""
+
     def __init__(self, factor_range=(0.75, 1.25)) -> None:
         self.factor_range = factor_range
 
@@ -325,6 +266,8 @@ class MutualRandomFactor:
 
 
 class ReplaceInvalid:
+    """Replace invalid values (=0) of a tensor with a given vale."""
+
     def __init__(self, value=None):
         self.value = value
 
@@ -355,84 +298,55 @@ class ReplaceInvalid:
 
 
 def get_mask(depth):
+    """Get mask depth > 0.0"""
 
     mask = depth.gt(0.0)
 
     return mask
 
 
-def test_dataset(device="cpu"):
+def test_dataset():
 
-    print("Testing TrainDataset class ...")
+    print("Testing InputTargetDataset class ...")
 
     # test specific imports
-    from torchvision import transforms
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
 
-    # define dataset
-    dataset = InputTargetDataset(
-        path_tuples_csv_files=[
-            "/home/auv/FLSea/archive/canyons/flatiron/flatiron/imgs/dataset_with_features.csv",
-        ],
-        shuffle=True,
-        input_transform=transforms.Compose(
-            [IntPILToTensor(type="uint8", device=device)]
-        ),
-        target_transform=transforms.Compose(
-            [
-                FloatPILToTensor(device=device),
-                ReplaceInvalid(value="max"),
-            ]
-        ),
-        all_transform=transforms.Compose(
-            [
-                MutualRandomHorizontalFlip(),
-                MutualRandomVerticalFlip(),
-            ]
-        ),
-        use_csv_samples=True,
-        target_samples_transform=transforms.Compose(
-            [
-                MutualRandomFactor(factor_range=(0.25, 1.75)),
-            ]
-        ),
-    )
+    from data.example_dataset.dataset import get_example_dataset
+
+    dataset = get_example_dataset()
 
     # dataloader
-    dataloader = DataLoader(dataset, batch_size=4)
+    dataloader = DataLoader(dataset, batch_size=2)
 
     for batch_id, data in enumerate(dataloader):
 
         rgb_imgs = data[0]
         d_imgs = data[1]
         masks = data[2]
-        depth_samples = data[3]
+        parametrizations = data[3]
 
         for i in range(rgb_imgs.size(0)):
 
             rgb_img = rgb_imgs[i, ...]
             d_img = d_imgs[i, ...]
             mask = masks[i, ...]
-            d_samples = depth_samples[i, ...]
+            nn_parametrization = parametrizations[i, 0, ...].unsqueeze(0)
+            prob_parametrization = parametrizations[i, 1, ...].unsqueeze(0)
+
             print(f"d range: [{d_img.min()}, {d_img.max()}]")
+
             plt.figure(f"rgb img {i}")
             plt.imshow(rgb_img.permute(1, 2, 0))
             plt.figure(f"d img {i}")
             plt.imshow(d_img.permute(1, 2, 0))
             plt.figure(f"mask {i}")
             plt.imshow(mask.permute(1, 2, 0))
-            plt.figure(f"depth with features {i}")
-            plt.imshow(d_img.permute(1, 2, 0))
-            plt.scatter(x=d_samples[:, 1], y=d_samples[:, 0])
-
-            d_img_values = d_img[
-                :, d_samples[:, 0].round().long(), d_samples[:, 1].round().long()
-            ].squeeze()[:5]
-            d_samples_values = d_samples[:, 2][:5]
-
-            print(f"depth values at feature location: {d_img_values}")
-            print(f"depth values of features: {d_samples_values}")
+            plt.figure(f"parametrization, NN {i}")
+            plt.imshow(nn_parametrization.permute(1, 2, 0))
+            plt.figure(f"parametrization, Probability {i}")
+            plt.imshow(prob_parametrization.permute(1, 2, 0))
 
         plt.show()
 
@@ -441,6 +355,6 @@ def test_dataset(device="cpu"):
     print("Testing DataSet class done.")
 
 
-# run as "python -m depth_estimation.utils.data"
+# run as "python -m depth_estimation.utils.data" from repo root
 if __name__ == "__main__":
-    test_dataset(device="cpu")
+    test_dataset()

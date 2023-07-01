@@ -1,5 +1,6 @@
 import torch.nn as nn
 from torchvision.models import mobilenet_v2
+
 from .layers import CombinedUpsample
 
 
@@ -15,6 +16,7 @@ class Encoder(nn.Module):
         features = []
 
         # extract features after all layers mobilenetv2 model and concatenate in a list
+        # for later usage in skip connections
         features.append(x)
         for submodule_id, submodule in self.original_model.features._modules.items():
             features.append(submodule(features[-1]))
@@ -61,7 +63,8 @@ class Decoder(nn.Module):
             decoder_channels // 8 + 16 + prior_channels, out_channels
         )
 
-        # 3x3 convolution, 1 channel output
+        # optional: 3x3 convolution, 1 channel output
+        # for estimating depth directly from encoder-decoder
         self.single_channel_output = single_channel_output
         if self.single_channel_output:
             self.conv3x3 = nn.Conv2d(
@@ -94,7 +97,7 @@ class Decoder(nn.Module):
         out = self.up4(out, skip1, depth_prior)  # size c//8 x 120 x 160
         out = self.up5(out, skip0, depth_prior)  # size c_out x 240 x 320
 
-        # final convolution to achieve single channel
+        # optional: final convolution to achieve single channel
         if self.single_channel_output:
             out = self.conv3x3(out)  # size 1 x 240 x 320
 

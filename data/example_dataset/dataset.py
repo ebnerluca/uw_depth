@@ -15,12 +15,7 @@ from depth_estimation.utils.data import (
 from torchvision import transforms
 
 
-def get_example_dataset(
-    # device="cpu",
-    train=False,
-    # use_csv_samples=False,
-    shuffle=False,
-):
+def get_example_dataset(train=False, shuffle=False, device="cpu"):
 
     # filenames
     index_file = "data/example_dataset/dataset.csv"
@@ -31,15 +26,13 @@ def get_example_dataset(
     if train:
         input_transform = transforms.Compose(
             [
-                IntPILToTensor(
-                    type="uint8"
-                ),  # , device=device),  # load uint8 img as tensor
+                IntPILToTensor(type="uint8", device=device),  # load uint8 img as tensor
                 transforms.ColorJitter(brightness=0.1, hue=0.05),  # color jitter
             ]
         )
         target_transform = transforms.Compose(
             [
-                FloatPILToTensor(),  # device=device),  # load float img as pytorch tensor
+                FloatPILToTensor(device=device),  # load float img as pytorch tensor
                 ReplaceInvalid(value="max"),  # replace invalid depth values (<= 0)
             ]
         )
@@ -53,32 +46,16 @@ def get_example_dataset(
     # if not train
     else:
         input_transform = transforms.Compose(
-            [
-                IntPILToTensor(
-                    type="uint8"
-                )  # , device=device),  # load uint8 img as tensor
-            ]
+            [IntPILToTensor(type="uint8", device=device)]  # load uint8 img as tensor
         )
         target_transform = transforms.Compose(
             [
-                FloatPILToTensor(),  # device=device),  # load float img as pytorch tensor
+                FloatPILToTensor(device=device),  # load float img as pytorch tensor
                 ReplaceInvalid(value="max"),  # replace invalid depth values (<= 0)
             ]
         )
         all_transform = None
         target_samples_transform = None
-
-    # instantiate dataset
-    # dataset = InputTargetDataset(
-    #     path_tuples_csv_files=path_tuples_csv_files,
-    #     shuffle=shuffle,
-    #     input_transform=input_transform,
-    #     target_transform=target_transform,
-    #     all_transform=all_transform,
-    #     use_csv_samples=use_csv_samples,
-    #     target_samples_transform=target_samples_transform,
-    #     max_samples=200,
-    # )
 
     # instantiate dataset
     dataset = InputTargetDataset(

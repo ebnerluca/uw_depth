@@ -1,16 +1,16 @@
 import torch
 import torch.nn as nn
+
 from .layers import PatchTransformerEncoder, PixelWiseDotProduct
 
 
 class mViT(nn.Module):
     """
-    Args
-        in_channels: number of input channels per pixel
-        embedding_dimension: dimension of patch embeddings for transformer input
-        patch_size: size of patch used for each embedding is patch_size x patch_size
-        num_heads: number of parallel heads for attention
-        num_query_kernels: number of output kernels used to compute range attention maps
+    - in_channels: number of input channels per pixel
+    - embedding_dimension: dimension of patch embeddings for transformer input
+    - patch_size: size of patch used for each embedding is patch_size x patch_size
+    - num_heads: number of parallel heads for attention
+    - num_query_kernels: number of output kernels used to compute range attention maps
     """
 
     def __init__(
@@ -39,7 +39,7 @@ class mViT(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(256, 256),
             nn.LeakyReLU(),
-            nn.Linear(256, n_bins + 1),
+            nn.Linear(256, n_bins + 1),  # n bins plus max depth
             # nn.ReLU(),
             nn.Softplus(),  # replace ReLU because it causes dead neurons
         )
@@ -59,12 +59,6 @@ class mViT(nn.Module):
 
         # kernels for attention maps, size N x NK x E
         attention_kernels = out[1 : self.num_query_kernels + 1, ...].permute(1, 0, 2)
-
-        # bin widths (deprecated)
-        # bin_widths_normed = self.mlp(bins_head)
-        # eps = 0.1  # numerical stability
-        # bin_widths_normed = torch.relu(bin_widths_normed) + eps  # non negative
-        # bin_widths_normed /= bin_widths_normed.sum(dim=1, keepdim=True)  # unit length
 
         # estimating max depth and normed bin_widths
         eps = 0.1

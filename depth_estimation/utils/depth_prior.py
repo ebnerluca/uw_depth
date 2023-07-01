@@ -1,7 +1,5 @@
 import torch
-
 from torch.distributions.normal import Normal
-from torch.distributions.exponential import Exponential
 
 
 def get_distance_maps(height, width, idcs_height, idcs_width, device="cpu"):
@@ -31,7 +29,7 @@ def get_distance_maps(height, width, idcs_height, idcs_width, device="cpu"):
 
 def get_probability_maps(dist_map):
     """Takes a Nx1xHxW distance map as input and outputs a probability map.
-    Pixels with small distance to closes feature have big probability and vice versa."""
+    Pixels with small distance to closest keypoint have big probability and vice versa."""
 
     # normal distribution
     distribution = Normal(loc=0.0, scale=10.0)
@@ -54,8 +52,6 @@ def get_probability_maps(dist_map):
 def get_depth_prior_from_ground_truth(
     targets, n_samples=200, mu=0.0, std=1.0, masks=None, device="cpu"
 ):
-    # targets, n_samples=200, mu=0.0, std=1.0, normalize=False, masks=None, device="cpu"
-
     """Takes an Nx1xHxW ground truth depth tensor and desired number of samples,
     returns two images per batch represention a prior guess parametrization:
 
@@ -151,7 +147,11 @@ def get_depth_prior_from_features(
     width=320,
 ):
     """Takes lists of pixel indices and their respective depth probes and
-    returns a depth prior parametrization."""
+    returns a dense depth prior parametrization.
+
+
+    - One image represents the nearest neighbor guess (Inpired by: https://arxiv.org/abs/1804.02771).
+    - The other image represents a probability map."""
 
     batch_size = features.size(0)
 
@@ -311,9 +311,7 @@ def test_get_priors_from_features(device="cpu"):
         features[i, ...] = img_features
 
     # get parametrization
-    prior = get_depth_prior_from_features(
-        features, height=height, width=width, mu=0.0, std=10.0, device=device
-    )
+    prior = get_depth_prior_from_features(features, height=height, width=width)
     prior_maps = prior[:, 0, ...].unsqueeze(1)
     signal_maps = prior[:, 1, ...].unsqueeze(1)
 

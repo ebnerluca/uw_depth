@@ -2,75 +2,11 @@ import torch
 import torch.nn as nn
 
 
-# class CombinedLoss(nn.Module):
-#     """Learning objective"""
-
-#     def __init__(
-#         self,
-#         w_silog=1.0,
-#         w_l2=1.0,
-#         w_bins=1.0,
-#         w_masked=1.0,
-#     ) -> None:
-#         super(CombinedLoss, self).__init__()
-
-#         self.name = "CombinedLoss"
-
-#         # loss components
-#         self.silog_loss = SILogLoss()
-#         self.l2_loss = L2Loss()
-#         self.bins_chamfer_loss = ChamferDistanceLoss()
-
-#         # weights
-#         self.w_silog = w_silog
-#         self.w_l2 = w_l2
-#         self.w_bins = w_bins
-#         self.w_masked = w_masked
-
-#     def forward(self, prediction, target, bin_edges, mask=None):
-
-#         # chamfer loss
-#         bins_chamfer_loss = self.bins_chamfer_loss(target, bin_edges, mask)
-
-#         # apply mask
-#         if mask is not None:
-#             masked_prediction = prediction[mask]
-#             masked_target = target[mask]
-#             invalid_prediction = prediction[~mask]
-#             invalid_target = target[~mask]
-#         else:
-#             masked_prediction = prediction
-#             masked_target = target
-
-#         # loss components
-#         silog_loss = self.silog_loss(masked_prediction, masked_target)
-#         l2_loss = self.l2_loss(masked_prediction, masked_target)
-
-#         # combined loss
-#         loss = (
-#             self.w_l2 * l2_loss
-#             + self.w_silog * silog_loss
-#             + self.w_bins * bins_chamfer_loss
-#         )
-
-#         # loss in areas of no ground truth
-#         if (mask is not None) and (self.w_masked < 1.0):
-
-#             invalid_silog_loss = self.silog_loss(invalid_prediction, invalid_target)
-#             invalid_l2_loss = self.l2_loss(invalid_prediction, invalid_target)
-#             invalid_loss = (
-#                 self.w_l2 * invalid_l2_loss + self.w_silog * invalid_silog_loss
-#             )
-
-#             loss = self.w_masked * loss + (1.0 - self.w_masked) * invalid_loss
-
-#         return loss
-
-
 class SILogLoss(nn.Module):
-    """Inspired by\\
-    AdaBins (https://arxiv.org/abs/2011.14141) and\\
-    UDepth (https://arxiv.org/abs/2209.12358)"""
+    """Scale invariant logarithmic loss.
+    
+    Inspired by https://arxiv.org/abs/1406.2283 \\
+    and https://arxiv.org/pdf/2011.14141.pdf"""
 
     def __init__(self, correction=1.0, scaling=10.0, eps=1e-10) -> None:
         """correction: in range [0,1], where 0 results in a loss equivalent to RMSE in log space
@@ -107,7 +43,9 @@ class SILogLoss(nn.Module):
 
 class ChamferDistanceLoss(nn.Module):
     """Chamfer Distance Loss.
-    Target images and bin centers are normalized by deviding by corresponding max."""
+    Target images and bin centers are normalized by deviding by corresponding max.
+
+    Inspired by https://arxiv.org/abs/1612.00603"""
 
     def __init__(self, scale_invariant=True) -> None:
         super(ChamferDistanceLoss, self).__init__()
@@ -135,10 +73,6 @@ class ChamferDistanceLoss(nn.Module):
 
         # per point average
         sum /= a.size(1)
-
-        # print(f"sum: {sum}")
-        # print(f"avg: {nn_squared_distances.mean()}")
-        # print(f"sum == avg: {sum==nn_squared_distances.mean()}")
 
         return sum
 
@@ -186,6 +120,8 @@ class ChamferDistanceLoss(nn.Module):
 
 
 class RMSELoss(nn.Module):
+    """Root Mean Squared Error (RMSE)"""
+
     def __init__(self) -> None:
         super(RMSELoss, self).__init__()
 
@@ -206,6 +142,8 @@ class RMSELoss(nn.Module):
 
 
 class MARELoss(nn.Module):
+    """Mean Absolute Relative Error (MARE)"""
+
     def __init__(self) -> None:
         super(MARELoss, self).__init__()
 
@@ -221,32 +159,6 @@ class MARELoss(nn.Module):
         loss = torch.mean(torch.abs((prediction - target) / target))
 
         return loss
-
-
-# def get_target_bins(target, n_bins=100):
-#     """UNTESTED: Reduce an image by sorting all pixel values first and using only its n_bins quantiles.
-#     This allows for much faster computation of e.g. the ChamferDistanceLoss, but also  loss of information.
-#     Returns a sorted reduced target in format Nx1xn_binsx1"""
-
-#     # # bins
-#     # edges = torch.arange(n_bins + 1) / n_bins
-#     # bin_centers = 0.5 * (edges[:-1] + edges[1:])
-#     # bin_centers = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
-
-#     # sort target
-#     target_sorted, _ = target.flatten(1).sort()
-
-#     # find indices for reduced img
-#     step = target_sorted.size(1) / n_bins
-#     edges = torch.arange(n_bins + 1)  # [0, 1, ..., n]
-#     bin_center_indices = 0.5 * (edges[:-1] + edges[1:]) * step
-#     # bin_center_indices = bin_centers.unsqueeze(0).expand(target.size(0), n_bins)
-
-#     # reduced target
-#     target_bins = target_sorted[:, bin_center_indices.long()]
-#     target_bins = target_bins.unsqueeze(1).unsqueeze(-1)  # channel and width dim
-
-#     return target_bins
 
 
 def test_chamfer():

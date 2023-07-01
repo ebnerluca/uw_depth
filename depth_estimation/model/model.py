@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as functional
+
 from .encoder_decoder import Encoder, Decoder
 from .mViT import mViT
 
@@ -37,7 +38,7 @@ class UDFNet(nn.Module):
         self.encoder = Encoder()
 
         # decoder
-        prior_channels = 2
+        prior_channels = 2  # channels of prior parametrization
         self.decoder = Decoder(
             in_channels=1280,
             out_channels=(48 - prior_channels),
@@ -46,13 +47,15 @@ class UDFNet(nn.Module):
 
         # mViT
         self.mViT = mViT(
-            in_channels=48,  # decoder output plus sparse prior parametrization
+            in_channels=48,  # decoder output plus prior parametrization
             embedding_dim=48,
             patch_size=16,
             num_heads=4,
             num_query_kernels=48,
             n_bins=n_bins,
         )
+
+        # regression for bin scores
         self.conv_out = nn.Sequential(
             nn.Conv2d(48, n_bins, kernel_size=1, stride=1, padding=0),
             nn.Softmax(dim=1),
@@ -65,8 +68,7 @@ class UDFNet(nn.Module):
     def forward(self, rgb, prior_parametrization):
         """Input:
         - rgb: RGB input image, Nx3x480x640
-        - prior_parametrization: Parametrization of sparse prior guidance signal, Nx2x240x320
-        - prior_features: list of features with their pixel position and depth value NxSx3, only used when outputting true scale ground_truth."""
+        - prior_parametrization: Parametrization of sparse prior guidance signal, Nx2x240x320"""
 
         # encode
         encoder_out = self.encoder(rgb)
@@ -122,6 +124,8 @@ def test_simple():
     # inference
     out = model(random_batch)
 
+    print("Ok")
+
 
 def test_udfnet():
 
@@ -131,10 +135,11 @@ def test_udfnet():
     udfnet = UDFNet(n_bins=100)
 
     # generate random input
-    random_batch = torch.rand(4, 3, 480, 640)
+    random_rgb = torch.rand(4, 3, 480, 640)
+    random_prior = torch.rand(4, 2, 240, 320)
 
     # inference
-    out = udfnet(random_batch)
+    out = udfnet(random_rgb, random_prior)
 
     print("Ok")
 

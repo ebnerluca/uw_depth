@@ -1,41 +1,28 @@
-from os.path import join
-import time
-import numpy as np
-
 import torch
 from torch.utils.data import DataLoader
 
+import numpy as np
 
 from depth_estimation.model.model import UDFNet
 from depth_estimation.utils.loss import RMSELoss, SILogLoss, MARELoss
 
-# from datasets.datasets import get_flsea_dataset, get_ycb_dataset
 from data.example_dataset.dataset import get_example_dataset
 
 
+############################################################
+###################### CONFIG ##############################
+############################################################
+
 BATCH_SIZE = 8
-# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DEVICE = "cpu"
-# MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/experiments/benchmark2/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
-# MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/experiments/no_prior/saved_models/model_e12_udfnet_lr0.0001_bs6_lrd0.95.pth"
-# MODEL_PATH = "/home/auv/depth_estimation/depth_estimation/train_runs_udfnet/ycb/no_prior/saved_models/model_e2_udfnet_lr0.0001_bs6_lrd0.6.pth"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 MODEL_PATH = "data/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
 
-# DATASET = get_flsea_dataset(
-#     device=DEVICE,
-#     split="test_with_matched_features",
-#     train=False,
-#     use_csv_samples=True,
-#     shuffle=False,
-# )
-# DATASET = get_ycb_dataset(
-#     device=DEVICE,
-#     split="val",
-#     train=False,
-#     use_csv_samples=True,
-#     shuffle=False,
-# )
-DATASET = get_example_dataset(train=False, shuffle=True)
+DATASET = get_example_dataset(train=False, shuffle=False, device=DEVICE)
+
+############################################################
+############################################################
+############################################################
 
 
 # losses
@@ -44,6 +31,7 @@ rmse_log = SILogLoss(correction=0.0, scaling=1.0)
 rmse_silog = SILogLoss(correction=1.0, scaling=1.0)
 mare = MARELoss()
 
+# max depth
 dmax = []
 
 
