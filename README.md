@@ -23,7 +23,6 @@ export PYTHONPATH="$PWD:$PYTHONPATH"
 While in the repository root folder, run
 ```
 python3 inference.py
-
 ```
 The results will be available under `data/out`
 
@@ -32,7 +31,7 @@ The results will be available under `data/out`
 ## Documentation
 
 ### Custom Datasets
-- `data/example_dataset` folder contains an example dataset which can be used as inspiration on how to setup your own custom dataset. Inside, the `dataset.py` script contains a conventient `get_example_dataset()` method which is reading a list of path tuples from `dataset.csv`.
+`data/example_dataset` folder contains an example dataset which can be used as inspiration on how to setup your own custom dataset. Inside, the `dataset.py` script contains a conventient `get_example_dataset()` method which is reading a list of path tuples from `dataset.csv`.
 
 ### Training, Test & Inference
 The training scripts are made available in the repository root folder and serve as a possible example on how you can train and monitor your custom training runs.
