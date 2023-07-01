@@ -1,9 +1,10 @@
 # Metrically Scaled Monocular Depth Estimation through Sparse Priors for Underwater Robots
-
 Thesis link: [Google Drive](https://drive.google.com/file/d/14l2fhPkZmZFd02KGrkmKGr-atHMf_0nd/view?usp=sharing)  
-Video link: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing)
 
-<video height="480" src="data/readme/rgb_heatmap_demo.mp4" controls title="Title"></video>
+https://github.com/ebnerluca/depth_estimation/assets/48278846/24c51208-c357-4ffc-91d6-d1a83b60e995
+
+Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing)
+
 ---
 
 ## Install
