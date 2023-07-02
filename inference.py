@@ -16,7 +16,9 @@ from data.example_dataset.dataset import get_example_dataset
 
 BATCH_SIZE = 6
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_PATH = "data/saved_models/model_e22_udfnet_lr0.0001_bs6_lrd0.9.pth"
+MODEL_PATH = (
+    "data/saved_models/model_e11_udfnet_lr0.0001_bs6_lrd0.9_with_infguidance.pth"
+)
 DATASET = get_example_dataset(train=False, shuffle=False, device=DEVICE)
 OUT_PATH = "data/out"
 SAVE = True
