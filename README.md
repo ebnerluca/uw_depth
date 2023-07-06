@@ -3,7 +3,7 @@ Thesis link: [Google Drive](https://drive.google.com/file/d/1gyKVCiBYeBK4SzJIGs3
 
 https://github.com/ebnerluca/depth_estimation/assets/48278846/24c51208-c357-4ffc-91d6-d1a83b60e995
 
-RGB vs. Depth Prediction (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing))
+RGB vs. Depth Prediction on FLSea dataset, 10 Hz Realtime (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing))
 
 ---
 
@@ -53,6 +53,7 @@ The `helper_scripts` folder contains useful scripts which can be used for prepro
 ---
 
 ## Acknowledgements
-https://github.com/shariqfarooq123/AdaBins  
-https://github.com/uf-robopi/UDepth
+[AdaBins](https://github.com/shariqfarooq123/AdaBins)  
+[UDepth](https://github.com/uf-robopi/UDepth)  
+[FLSea](https://arxiv.org/abs/2302.12772)
 
