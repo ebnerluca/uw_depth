@@ -34,13 +34,13 @@ The results will be available under `data/out`
 ## Documentation
 
 ### Training, Test & Inference
-The training scripts are made available in the repository root folder and serve as a examples on how you can train and monitor your custom training runs.
+The training, test and inference scripts are made available in the repository root folder and serve as examples on how you can train and monitor your custom training runs.
 
 ### Depth Estimation
 The `depth_estimation` module contains python packages with the code for setting up the model as well as utils to load data, compute losses and visualize data during training.
 
 ### Custom Datasets
-`data/example_dataset` folder contains an example dataset which can be used as inspiration on how to setup your own custom dataset. Inside, the `dataset.py` script contains a conventient `get_example_dataset()` method which is reading a list of path tuples from `dataset.csv`.
+`data/example_dataset` folder contains an example dataset which can be used to run the demo as well as an inspiration on how to setup your own custom dataset. Inside, the `dataset.py` script provides a convenient `get_example_dataset()` method which is reading a list of path tuples from `dataset.csv`.
 
 ### Preprocessing
 The `helper_scripts` folder contains useful scripts which can be used for preprocessing of datasets, such as extracting visual features for usage as sparse depth measurements or creating train/test splits.
