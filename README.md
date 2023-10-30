@@ -1,5 +1,5 @@
 # Metrically Scaled Monocular Depth Estimation through Sparse Priors for Underwater Robots
-Paper link (Submitted to ICRA 2024): [Google Drive](https://drive.google.com/file/d/1Oem_Mi6bb4qe1co-PxUZVCEAu1Fp1uPm/view?usp=drive_link)  
+Paper link (Submitted to ICRA 2024): [arXiv](https://arxiv.org/abs/2310.16750), [arXiv PDF](https://arxiv.org/pdf/2310.16750.pdf), [Google Drive](https://drive.google.com/file/d/1Oem_Mi6bb4qe1co-PxUZVCEAu1Fp1uPm/view?usp=drive_link)  
 
 https://github.com/ebnerluca/depth_estimation/assets/48278846/24c51208-c357-4ffc-91d6-d1a83b60e995
 
