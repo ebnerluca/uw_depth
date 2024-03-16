@@ -15,6 +15,7 @@ from os import mkdir
 #     get_ycb_dataset,
 # )  # , get_usod10k_dataset
 from data.example_dataset.dataset import get_example_dataset
+# from data.flsea.dataset import get_flsea_dataset
 
 ##########################################
 ################# CONFIG #################
@@ -62,7 +63,7 @@ def debug_draw_keypoints(img, points, color=(0, 255, 0)):
     """img: cv2 img, points: list of points with (row, col) each."""
 
     # iterate over points
-    for point in points.astype(np.int):
+    for point in points.astype(int):
 
         # cv2 uses x,y axis notation
         xy_tuple = (point[1], point[0])
@@ -84,8 +85,8 @@ def debug_draw_lines(img1, img2, lines, pts, pts_prev):
         x0, y0 = map(int, [0, -line[2] / line[1]])
         x1, y1 = map(int, [width, -(line[2] + line[0] * width) / line[1]])
         img1 = cv2.line(img1, (x0, y0), (x1, y1), color, 1)
-        img1 = cv2.circle(img1, tuple(pt.astype(np.int)), 5, color, -1)
-        img2 = cv2.circle(img2, tuple(pt_prev.astype(np.int)), 5, color, -1)
+        img1 = cv2.circle(img1, tuple(pt.astype(int)), 5, color, -1)
+        img2 = cv2.circle(img2, tuple(pt_prev.astype(int)), 5, color, -1)
 
     return img1, img2
 
@@ -100,10 +101,10 @@ def get_keypoints_and_descriptors(img, n_rows, n_cols, n_keypoints):
     # edges for patch indices
     row_step = height / n_rows
     col_step = width / n_cols
-    row_edges = np.array(range(n_rows + 1), dtype=np.float)
-    col_edges = np.array(range(n_cols + 1), dtype=np.float)
-    row_edges = (row_edges * row_step).astype(np.int)
-    col_edges = (col_edges * col_step).astype(np.int)
+    row_edges = np.array(range(n_rows + 1), dtype=float)
+    col_edges = np.array(range(n_cols + 1), dtype=float)
+    row_edges = (row_edges * row_step).astype(int)
+    col_edges = (col_edges * col_step).astype(int)
 
     # sift detector
     detector = cv2.SIFT_create(
@@ -248,8 +249,8 @@ for path_tuple in path_tuples:
 
     # get depth values
     depth_values = depth[
-        pts_scaled[:, 0].round().astype(np.int),
-        pts_scaled[:, 1].round().astype(np.int),
+        pts_scaled[:, 0].round().astype(int),
+        pts_scaled[:, 1].round().astype(int),
     ]
     depth_values = depth_values[..., np.newaxis]
 
@@ -352,7 +353,7 @@ for path_tuple in path_tuples:
                 img_kp_prev_epifilt, pts_prev, color=(0, 255, 0)
             )
 
-            good_matches = np.array(matches)[mask.flatten().astype(np.bool).tolist()]
+            good_matches = np.array(matches)[mask.flatten().astype(bool).tolist()]
             img_matches_filtered = cv2.drawMatches(
                 img,
                 keypoints,

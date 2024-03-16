@@ -145,6 +145,26 @@ class InputTargetDataset:
         depth_samples = torch.from_numpy(depth_samples).to(device)
 
         return depth_samples
+    
+class InputDataset:
+    """Similar to InputTargetDataset above, but for inference only"""
+
+    def __init__(self, img_files):#, device="cpu") -> None:
+        self.img_files = img_files
+        # self.device = device
+
+
+    def __len__(self):
+        return len(self.img_files)
+    
+    def __getitem__(self, idx):
+
+        img = Image.open(self.img_files[idx]).resize((640, 480))
+
+        tf = IntPILToTensor()
+        img = tf(img)
+
+        return [img]
 
 
 class MutualRandomHorizontalFlip:

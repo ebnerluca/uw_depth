@@ -1,9 +1,15 @@
 # Metrically Scaled Monocular Depth Estimation through Sparse Priors for Underwater Robots
-Paper link (Submitted to ICRA 2024): [arXiv](https://arxiv.org/abs/2310.16750), [arXiv PDF](https://arxiv.org/pdf/2310.16750.pdf), [Google Drive](https://drive.google.com/file/d/1Oem_Mi6bb4qe1co-PxUZVCEAu1Fp1uPm/view?usp=drive_link)  
+
+## Description
+This is an accepted paper at [**ICRA 2024**](https://2024.ieee-icra.org).
+
+In short, this depth prediction model estimates depth maps from underwater RGB images. To solve the problem of scale ambiguity, the network additionally fuses sparse depth priors, e.g. coming from a SLAM pipeline.
+
+Paper link: [arXiv](https://arxiv.org/abs/2310.16750), [arXiv PDF](https://arxiv.org/pdf/2310.16750.pdf), [Google Drive](https://drive.google.com/file/d/1Oem_Mi6bb4qe1co-PxUZVCEAu1Fp1uPm/view?usp=drive_link)  
 
 https://github.com/ebnerluca/depth_estimation/assets/48278846/24c51208-c357-4ffc-91d6-d1a83b60e995
 
-RGB vs. Depth Prediction on FLSea dataset, 10 Hz Realtime (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing))
+Video: RGB (left) vs. Depth Prediction (right) on FLSea dataset at 10 Hz (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing)).
 
 ---
 
@@ -43,7 +49,17 @@ The `depth_estimation` module contains python packages with the code for setting
 `data/example_dataset` folder contains an example dataset which can be used to run the demo as well as an inspiration on how to setup your own custom dataset. Inside, the `dataset.py` script provides a convenient `get_example_dataset()` method which is reading a list of path tuples from `dataset.csv`.
 
 ### Preprocessing
-The `helper_scripts` folder contains useful scripts which can be used for preprocessing of datasets, such as extracting visual features for usage as sparse depth measurements or creating train/test splits.
+The `helper_scripts` folder contains useful scripts which can be used for preprocessing of datasets, such as extracting visual features for usage as sparse depth measurements or creating train/test splits. In general, every data point in a dataset needs:
+- RGB image (see `data/example_dataset/rgb`)
+- keypoint location with corresponding depth (see `data/example_dataset/features`) *
+- depth image ground truth (for training / evaluation only, see `data/example_dataset/depth`)
+
+\* check out `helper_scripts/extract_dataset_features.py` for a simple example on how such features can be generated if ground truth is available. If not, you could use e.g. SLAM.
+
+Then, the `.csv` file defines the tuples, see `data/example_dataset/dataset.csv`.
+
+Make sure that you also load your data correctly via the dataloader, e.g. depending on your dataset, images can be in uint8, uint16 or float format (see `data/example_dataset/dataset.py`)
+
 
 
 
