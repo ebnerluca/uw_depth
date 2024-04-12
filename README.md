@@ -5,11 +5,17 @@ This is an accepted paper at [**ICRA 2024**](https://2024.ieee-icra.org).
 
 In short, this depth prediction model estimates depth maps from underwater RGB images. To solve the problem of scale ambiguity, the network additionally fuses sparse depth priors, e.g. coming from a SLAM pipeline.
 
-Paper link: [arXiv](https://arxiv.org/abs/2310.16750), [arXiv PDF](https://arxiv.org/pdf/2310.16750.pdf), [Google Drive](https://drive.google.com/file/d/1Oem_Mi6bb4qe1co-PxUZVCEAu1Fp1uPm/view?usp=drive_link)  
+**Paper document:** [arXiv](https://arxiv.org/abs/2310.16750), [arXiv PDF](https://arxiv.org/pdf/2310.16750.pdf), [Google Drive](https://drive.google.com/file/d/1iVhY4Fepr0NKsXlnEsKGzqN_aFS8brBi/view?usp=sharing)  
+**Paper video (3min):** [Google Drive](https://drive.google.com/file/d/1gjsTty9ybdq1y9jcAU-WVLKuEU3IfC1v/view?usp=sharing)  
+**Paper graphic:** [Google Drive](https://drive.google.com/file/d/1CKoh1t7I11uhEjTj_gEW5-1O-NIelhbd/view?usp=sharing)  
+
+
+![GraphicalAbstract](https://github.com/ebnerluca/uw_depth/assets/48278846/306d49e5-6dee-4405-9cf6-b3922073211a)
+**Graphical Abstract**
 
 https://github.com/ebnerluca/depth_estimation/assets/48278846/24c51208-c357-4ffc-91d6-d1a83b60e995
 
-Video: RGB (left) vs. Depth Prediction (right) on FLSea dataset at 10 Hz (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing)).
+**Video:** RGB (left) vs. Depth Prediction (right) on FLSea dataset at 10 Hz (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing)).
 
 ---
 
