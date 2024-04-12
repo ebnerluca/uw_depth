@@ -9,10 +9,6 @@ In short, this depth prediction model estimates depth maps from underwater RGB i
 **Paper video (3min):** [Google Drive](https://drive.google.com/file/d/1gjsTty9ybdq1y9jcAU-WVLKuEU3IfC1v/view?usp=sharing)  
 **Paper graphic:** [Google Drive](https://drive.google.com/file/d/1CKoh1t7I11uhEjTj_gEW5-1O-NIelhbd/view?usp=sharing)  
 
-
-![GraphicalAbstract](https://github.com/ebnerluca/uw_depth/assets/48278846/306d49e5-6dee-4405-9cf6-b3922073211a)
-**Graphical Abstract**
-
 https://github.com/ebnerluca/depth_estimation/assets/48278846/24c51208-c357-4ffc-91d6-d1a83b60e995
 
 **Video:** RGB (left) vs. Depth Prediction (right) on FLSea dataset at 10 Hz (Full Video: [Google Drive](https://drive.google.com/file/d/1KoIy49MqRIfAvJXvllrXJwZ92Vnmrgh8/view?usp=sharing)).
