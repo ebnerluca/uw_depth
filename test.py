@@ -73,6 +73,13 @@ def test():
         # outputs
         prediction, _ = model(rgb, prior)
 
+        # # enforce best fit at keypoint locations
+        # priors_mask = (prior[:,1,:,:] == 1).unsqueeze(1)  # mask for location of keypoints, probability is ==1 at keypoint locations
+        # scales = torch.zeros(BATCH_SIZE, 1, 1, 1).to(DEVICE)  # retrieve correction scale for best scale in RMSE sense
+        # for i in range(BATCH_SIZE):
+        #     scales[i] = get_scale(prediction[i], target[i], priors_mask[i])
+        # prediction = scales * prediction
+
         # loss
         for i, r in enumerate(ranges):
 
@@ -119,6 +126,15 @@ def test():
 
     print(f"max_depth mean: {np.mean(dmax)}")
     print(f"max_depth median: {np.median(dmax)}")
+
+def get_scale(prediction, target, mask):
+    
+    # A*s = B
+    A = prediction[mask].unsqueeze(1)
+    B = target[mask].unsqueeze(1)
+    s = torch.linalg.lstsq(A, B).solution
+
+    return s
 
 
 if __name__ == "__main__":

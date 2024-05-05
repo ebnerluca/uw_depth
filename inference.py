@@ -47,8 +47,9 @@ def inference():
         # inputs
         rgb = data[0].to(DEVICE)  # RGB image
         prior = data[3].to(DEVICE)  # precomputed features and depth values
+        # prior = torch.zeros(BATCH_SIZE,2,240,320).to(DEVICE)  # use this as placeholder if you dont have priors
 
-        # nullprior
+        # nullprior, use this if you are using a model that was trained with nullpriors
         # prior[:, :, :, :] = 0.0
 
         # outputs
@@ -72,8 +73,8 @@ def inference():
 
                 # out_rgb = join(OUT_PATH, f"{index}_rgb.png")
                 # out_prediction = join(OUT_PATH, f"{index}_depth.png")
-                out_heatmap = join(OUT_PATH, f"{index}_heatmap.png")
-                out_rgb_heatmap = join(OUT_PATH, f"{index}_rgb_heatmap.png")
+                out_heatmap = join(OUT_PATH, f"{index}".zfill(4) + "_heatmap.png")
+                out_rgb_heatmap = join(OUT_PATH, f"{index}".zfill(4) + "_rgb_heatmap.png")
 
                 # save_image(rgb[i], out_rgb)
                 # save_image(prediction[i], out_prediction)
