@@ -11,7 +11,7 @@ from depth_estimation.model.model import UDFNet
 from depth_estimation.utils.visualization import gray_to_heatmap
 
 # from datasets.datasets import get_flsea_dataset
-from data.example_dataset.dataset import get_example_dataset
+from data.example_dataset.dataset import get_example_dataset, get_example_dataset_inference
 
 
 BATCH_SIZE = 6
@@ -19,7 +19,11 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_PATH = (
     "data/saved_models/model_e11_udfnet_lr0.0001_bs6_lrd0.9_with_infguidance.pth"
 )
-DATASET = get_example_dataset(train=False, shuffle=False, device=DEVICE)
+DATASET = get_example_dataset_inference(priors=True)
+# MODEL_PATH = (
+#     "data/saved_models/model_e24_udfnet_lr0.0001_bs6_lrd0.9_nullpriors.pth"
+# )
+# DATASET = get_example_dataset_inference(priors=False)
 OUT_PATH = "data/out"
 SAVE = True
 
@@ -46,11 +50,12 @@ def inference():
 
         # inputs
         rgb = data[0].to(DEVICE)  # RGB image
-        prior = data[3].to(DEVICE)  # precomputed features and depth values
-        # prior = torch.zeros(BATCH_SIZE,2,240,320).to(DEVICE)  # use this as placeholder if you dont have priors
 
-        # nullprior, use this if you are using a model that was trained with nullpriors
-        # prior[:, :, :, :] = 0.0
+        # using priors from files or not
+        if len(data) > 1:
+            prior = data[1].to(DEVICE)  # precomputed features and depth values
+        else: 
+            prior = torch.zeros(BATCH_SIZE,2,240,320).to(DEVICE)  # if you dont have/want priors
 
         # outputs
         start_time = time.time()
