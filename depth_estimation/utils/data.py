@@ -49,7 +49,7 @@ class InputTargetDataset:
         self.max_priors = max_priors
 
         # checking dataset for missing files
-        if not self.check_dataset():
+        if not check_dataset(self.path_tuples):
             print("WARNING, dataset has missing files!")
             # exit(1)
 
