@@ -43,6 +43,7 @@ The results will be available under `data/out`
 
 ### Training, Test & Inference
 The training, test and inference scripts are made available in the repository root folder and serve as examples on how you can train and monitor your custom training runs.
+The training script produces logfiles in the current working directory for usage with tensorboard, a visualization tool to see what is going on during training, test and inference. To inspect the logfiles (at runtime or post-training), use `tensorboard --logdir your_logfile_path`, the visualizations can then be seen in your browser.
 
 ### Depth Estimation
 The `depth_estimation` module contains python packages with the code for setting up the model as well as utils to load data, compute losses and visualize data during training.
