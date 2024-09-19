@@ -1,11 +1,12 @@
 # Metrically Scaled Monocular Depth Estimation through Sparse Priors for Underwater Robots
 
 ## Description
-This is an accepted paper at [**ICRA 2024**](https://2024.ieee-icra.org).
+**Published in:** [**2024 IEEE International Conference on Robotics and Automation (ICRA)**](https://ieeexplore.ieee.org/xpl/conhome/10609961/proceeding)\
+**Conference link:** [ICRA 2024](https://2024.ieee-icra.org).
 
 In short, this depth prediction model estimates depth maps from underwater RGB images. To solve the problem of scale ambiguity, the network additionally fuses sparse depth priors, e.g. coming from a SLAM pipeline.
 
-**Paper document:** [arXiv](https://arxiv.org/abs/2310.16750), [arXiv PDF](https://arxiv.org/pdf/2310.16750.pdf), [Google Drive](https://drive.google.com/file/d/1iVhY4Fepr0NKsXlnEsKGzqN_aFS8brBi/view?usp=sharing)  
+**Paper document:** [IEEE Xplore](https://ieeexplore.ieee.org/abstract/document/10611007), [arXiv](https://arxiv.org/abs/2310.16750), [arXiv PDF](https://arxiv.org/pdf/2310.16750.pdf), [Google Drive](https://drive.google.com/file/d/1iVhY4Fepr0NKsXlnEsKGzqN_aFS8brBi/view?usp=sharing)  
 **Paper video (3min):** [Google Drive](https://drive.google.com/file/d/1gjsTty9ybdq1y9jcAU-WVLKuEU3IfC1v/view?usp=sharing)  
 **Paper graphic:** [Google Drive](https://drive.google.com/file/d/1CKoh1t7I11uhEjTj_gEW5-1O-NIelhbd/view?usp=sharing)  
 
