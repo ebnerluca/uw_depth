@@ -5,6 +5,7 @@ import csv
 
 from depth_estimation.utils.data import (
     InputTargetDataset,
+    InputDataset,
     IntPILToTensor,
     FloatPILToTensor,
     MutualRandomFactor,
@@ -67,5 +68,25 @@ def get_example_dataset(train=False, shuffle=False, device="cpu"):
         max_priors=200,
         shuffle=shuffle,
     )
+
+    return dataset
+
+def get_example_dataset_inference(priors=True):
+
+    # filenames
+    index_file = "data/example_dataset/dataset.csv"
+    lines = csv.reader(open(index_file).read().splitlines())
+    rgb_target_priors_tuples = [i for i in lines]
+
+    # image transform
+    image_transform = IntPILToTensor(type="uint8")
+
+    # priors (or not)
+    if priors:
+        tuples = [[t[0], t[2]] for t in rgb_target_priors_tuples]  # omit target depth maps
+        dataset = InputDataset(tuples, image_transform, max_priors=200)
+    else:
+        tuples = [[t[0]] for t in rgb_target_priors_tuples]  # omit target depth maps and priors
+        dataset = InputDataset(tuples, image_transform, max_priors=0)  
 
     return dataset

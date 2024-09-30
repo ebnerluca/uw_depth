@@ -11,3 +11,6 @@ opencv-contrib-python
 torch
 torchvision
 torchaudio
+
+# visualization
+tensorboard

@@ -49,7 +49,7 @@ class InputTargetDataset:
         self.max_priors = max_priors
 
         # checking dataset for missing files
-        if not self.check_dataset():
+        if not check_dataset(self.path_tuples):
             print("WARNING, dataset has missing files!")
             # exit(1)
 
@@ -82,7 +82,7 @@ class InputTargetDataset:
             return self[random_idx]  # recursion
 
         # read sparse depth priors
-        depth_samples = self.read_features(depth_samples_fn, device=target_img.device)
+        depth_samples = read_features(depth_samples_fn, self.max_priors, device=target_img.device)
 
         # check if features has at least one entry
         if depth_samples is None:
@@ -113,19 +113,19 @@ class InputTargetDataset:
 
         return tensor_list
 
-    def check_dataset(self):
+def check_dataset(path_tuples):
         """Checks dataset for missing files."""
-        for tuple in self.path_tuples:
+        for tuple in path_tuples:
             for f in tuple:
                 if not exists(f):
                     print(f"Missing file: {f}.")
                     return False
 
-        print(f"Checked {len(self.path_tuples)} tuples for existence, all ok.")
+        print(f"Checked {len(path_tuples)} tuples for existence, all ok.")
 
         return True
 
-    def read_features(self, path, device="cpu"):
+def read_features(path, max_priors, device="cpu"):
         """Read sparse priors from file and store in torch tensor."""
 
         # load samples (might be less than n_samples)
@@ -137,7 +137,7 @@ class InputTargetDataset:
             return None
         else:
             rand_idcs = np.random.permutation(len(depth_samples_data))[
-                : self.max_priors
+                : max_priors
             ]
             depth_samples = depth_samples_data[rand_idcs]  # select subset
 
@@ -145,26 +145,57 @@ class InputTargetDataset:
         depth_samples = torch.from_numpy(depth_samples).to(device)
 
         return depth_samples
-    
+
+
 class InputDataset:
-    """Similar to InputTargetDataset above, but for inference only"""
+    """Similar to InputTargetDataset above, but for inference only. If priors are not available, set `max_priors` to zero."""
 
-    def __init__(self, img_files):#, device="cpu") -> None:
-        self.img_files = img_files
-        # self.device = device
+    def __init__(self, rgb_priors_tuples, image_transform, max_priors=200) -> None:
+        
+        self.path_tuples = rgb_priors_tuples
+        self.image_transform = image_transform
+        self.max_priors = max_priors
 
+        if self.max_priors > 0:
+            print(f"Using priors (max {self.max_priors} per image).")
+            check_dataset(self.path_tuples)
+        else: 
+            image_fns = [[t[0]] for t in self.path_tuples]
+            print("Not using priors, using nullprior as placeholder.")
+            check_dataset(image_fns)
 
     def __len__(self):
-        return len(self.img_files)
+        return len(self.path_tuples)
     
     def __getitem__(self, idx):
 
-        img = Image.open(self.img_files[idx]).resize((640, 480))
+        # get img filename
+        input_fn = self.path_tuples[idx][0]
 
-        tf = IntPILToTensor()
-        img = tf(img)
+        # read img
+        input_img = Image.open(input_fn).resize((640, 480))
 
-        return [img]
+        # apply image transforms to get tensor
+        input_img = self.image_transform(input_img)
+
+        if self.max_priors > 0:
+
+            # get keypoints filename
+            depth_samples_fn = self.path_tuples[idx][1]
+
+            # read sparse depth priors
+            depth_samples = read_features(depth_samples_fn, self.max_priors, device=input_img.device)
+            
+            # get dense parametrization from sparse priors
+            parametrization = get_depth_prior_from_features(
+                features=depth_samples.unsqueeze(0),  # add batch dimension
+                height=240,
+                width=320,
+            ).squeeze(0)
+
+            return [input_img, parametrization]
+        else:
+            return [input_img]
 
 
 class MutualRandomHorizontalFlip:

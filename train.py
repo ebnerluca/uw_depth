@@ -16,7 +16,8 @@ from depth_estimation.utils.loss import (
 )
 from depth_estimation.utils.visualization import get_tensorboard_grids
 
-from data.flsea.dataset import get_flsea_dataset
+# from data.flsea.dataset import get_flsea_dataset
+from data.example_dataset.dataset import get_example_dataset
 
 
 ##############################################################
@@ -58,18 +59,21 @@ VALIDATION_LOSS_NAMES = [
 ]
 
 # datasets
-TRAIN_DATASET = get_flsea_dataset(
-    split="dataset_with_matched_features",
-    train=True,
-    shuffle=True,
-    device=DEVICE,
-)
-VALIDATION_DATASET = get_flsea_dataset(
-    split="test_with_matched_features",
-    train=False,
-    shuffle=True,
-    device=DEVICE,
-)
+# TRAIN_DATASET = get_flsea_dataset(
+#     split="dataset_with_matched_features",
+#     train=True,
+#     shuffle=True,
+#     device=DEVICE,
+# )
+# VALIDATION_DATASET = get_flsea_dataset(
+#     split="test_with_matched_features",
+#     train=False,
+#     shuffle=True,
+#     device=DEVICE,
+# )
+
+TRAIN_DATASET = get_example_dataset(train=True, shuffle=True, device=DEVICE)
+VALIDATION_DATASET = get_example_dataset(train=False, shuffle=True, device=DEVICE)  # you should change this, this should not be the same as training
 
 # tensorboard output frequencies
 WRITE_TRAIN_IMG_EVERY_N_BATCHES = 500
