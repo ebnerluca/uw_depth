@@ -10,9 +10,12 @@ from torchvision.transforms import Resize
 from depth_estimation.model.model import UDFNet
 from depth_estimation.utils.visualization import gray_to_heatmap
 
-# from datasets.datasets import get_flsea_dataset
 from data.example_dataset.dataset import get_example_dataset, get_example_dataset_inference
 
+
+############################################################
+###################### CONFIG ##############################
+############################################################
 
 BATCH_SIZE = 6
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -20,12 +23,18 @@ MODEL_PATH = (
     "data/saved_models/model_e11_udfnet_lr0.0001_bs6_lrd0.9_with_infguidance.pth"
 )
 DATASET = get_example_dataset_inference(priors=True)
+OUT_PATH = "data/out"
+SAVE = True
+
+# use this if priors are not available
 # MODEL_PATH = (
 #     "data/saved_models/model_e24_udfnet_lr0.0001_bs6_lrd0.9_nullpriors.pth"
 # )
 # DATASET = get_example_dataset_inference(priors=False)
-OUT_PATH = "data/out"
-SAVE = True
+
+############################################################
+############################################################
+############################################################
 
 
 @torch.no_grad()
