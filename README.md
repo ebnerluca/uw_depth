@@ -1,4 +1,4 @@
-# Metrically Scaled Monocular Depth Estimation through Sparse Priors for Underwater Robots
+# TRUDepth: Metrically Scaled Monocular Depth Estimation through Sparse Priors for Underwater Robots
 
 ## Description
 **Published in:** [**2024 IEEE International Conference on Robotics and Automation (ICRA)**](https://ieeexplore.ieee.org/xpl/conhome/10609961/proceeding)\
