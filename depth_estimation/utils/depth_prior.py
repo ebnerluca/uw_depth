@@ -1,6 +1,9 @@
 import torch
 from torch.distributions.normal import Normal
 
+from scipy.interpolate import RBFInterpolator
+import numpy as np
+
 
 def get_distance_maps(height, width, idcs_height, idcs_width, device="cpu"):
     """Returns a SxHxW tensor that captures the euclidean pixel distance to S
@@ -140,6 +143,22 @@ def get_depth_prior_from_ground_truth(
 
     return parametrization, features
 
+def get_rbf_from_features(
+        features,
+        height=240,
+        width=320
+    ):
+
+    xx, yy = np.meshgrid(np.arange(height), np.arange(width), indexing='ij')
+    grid_points = np.column_stack((xx.ravel(), yy.ravel()))
+
+    pts = features[0, ...].unique(dim=0)[:,:2].cpu()
+    values = features[0, ...].unique(dim=0)[:,2].cpu()
+
+    interpolator = RBFInterpolator(pts, values, kernel="linear")
+    rbf = interpolator(grid_points).reshape((height, width))
+    
+    return torch.from_numpy(rbf).to(features.device)
 
 def get_depth_prior_from_features(
     features,
@@ -192,7 +211,12 @@ def get_depth_prior_from_features(
         dist_map_min, dist_argmin = torch.min(sample_dist_maps, dim=0, keepdim=True)
 
         # nearest neighbor prior map
-        prior_map = depth_values[dist_argmin]  # 1xHxW
+        # prior_map = depth_values[dist_argmin]  # 1xHxW
+        prior_map = get_rbf_from_features(
+            features,
+            height=240,
+            width=320
+            )
 
         # concat
         prior_maps[i, ...] = prior_map
